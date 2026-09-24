@@ -21,17 +21,17 @@ describe('validatePattern', () => {
 	});
 
 	it('refuses a yearly circle without the year, because numbers would repeat', () => {
-		expect(validatePattern('RE-{NNN}', 'yearly')).toMatch(/Jahr/);
+		expect(validatePattern('RE-{NNN}', 'yearly')).toBe('invoice.problem.patternYear');
 	});
 
 	it('refuses a monthly circle without year and month', () => {
-		expect(validatePattern('{YYYY}-{NNN}', 'monthly')).toMatch(/Monat/);
+		expect(validatePattern('{YYYY}-{NNN}', 'monthly')).toBe('invoice.problem.patternMonth');
 	});
 
 	it('refuses zero or two counters, and unknown placeholders', () => {
-		expect(validatePattern('{YYYY}', 'yearly')).toMatch(/Zähler/);
-		expect(validatePattern('{YYYY}-{NN}-{NN}', 'yearly')).toMatch(/Zähler/);
-		expect(validatePattern('{YYYY}-{NNN}-{KUNDE}', 'yearly')).toMatch(/Platzhalter/);
+		expect(validatePattern('{YYYY}', 'yearly')).toBe('invoice.problem.patternCounter');
+		expect(validatePattern('{YYYY}-{NN}-{NN}', 'yearly')).toBe('invoice.problem.patternCounter');
+		expect(validatePattern('{YYYY}-{NNN}-{KUNDE}', 'yearly')).toBe('invoice.problem.patternToken');
 	});
 });
 
@@ -114,7 +114,7 @@ describe('nextInvoiceNumber', () => {
 	it('throws on a pattern that would repeat numbers', () => {
 		expect(() =>
 			nextInvoiceNumber({ pattern: 'RE-{NNN}', reset: 'yearly' }, [], on('2026-09-15'))
-		).toThrow(/Jahr/);
+		).toThrow('invoice.problem.patternYear');
 	});
 });
 

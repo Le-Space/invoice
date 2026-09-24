@@ -35,6 +35,10 @@ const TOKEN = /\{(YYYY|YY|MM|N+)\}/g;
 /**
  * Why a pattern cannot be used, or null when it can.
  *
+ * A code rather than a sentence: the text lives in the catalogues, where a
+ * missing translation is caught, and where it can be read in the language the
+ * reader chose.
+ *
  * A circle that restarts every year but does not carry the year would hand out
  * RE-001 in 2026 and again in 2027 — two invoices, one number. That is the one
  * mistake worth refusing outright.
@@ -49,18 +53,10 @@ export function validatePattern(pattern, reset) {
 	const hasYear = tokens.includes('YYYY') || tokens.includes('YY');
 	const hasMonth = tokens.includes('MM');
 
-	if (counters.length !== 1) {
-		return 'Das Muster braucht genau einen Zähler, zum Beispiel {NNN}.';
-	}
-	if (/[{}]/.test(pattern.replace(TOKEN, ''))) {
-		return 'Erlaubt sind nur {YYYY}, {YY}, {MM} und {N…} als Platzhalter.';
-	}
-	if (reset === 'yearly' && !hasYear) {
-		return 'Ein Kreis, der jedes Jahr neu beginnt, braucht das Jahr in der Nummer, sonst entstehen doppelte Nummern.';
-	}
-	if (reset === 'monthly' && !(hasYear && hasMonth)) {
-		return 'Ein Kreis, der jeden Monat neu beginnt, braucht Jahr und Monat in der Nummer.';
-	}
+	if (counters.length !== 1) return 'invoice.problem.patternCounter';
+	if (/[{}]/.test(pattern.replace(TOKEN, ''))) return 'invoice.problem.patternToken';
+	if (reset === 'yearly' && !hasYear) return 'invoice.problem.patternYear';
+	if (reset === 'monthly' && !(hasYear && hasMonth)) return 'invoice.problem.patternMonth';
 	return null;
 }
 
