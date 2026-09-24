@@ -126,7 +126,45 @@ describe('the invoice itself', () => {
 			'USt.',
 			'Betrag'
 		]);
-		expect(rows).toEqual([['1', 'Tagessatz', '2', 'Tage', '500,00', '19 %', '1.000,00']]);
+		expect(rows).toEqual([
+			{
+				position: '1',
+				description: 'Tagessatz',
+				subtitle: '',
+				details: [],
+				quantity: '2',
+				unit: 'Tage',
+				unitPrice: '500,00',
+				vat: '19 %',
+				net: '1.000,00'
+			}
+		]);
+	});
+
+	it('carries the subtitle and the bullets that explain a line', () => {
+		// What an invoice a customer can check looks like: the line, what it
+		// was about, and what was actually done.
+		const model = documentModel(
+			issued({
+				lines: [
+					emptyLine({
+						description: 'Beratung für künstliche Intelligenz',
+						subtitle: 'Doichain Core 31.1 · Aufwand 9,5 Std.',
+						details: ['LWMA und DigiShield erklärt', '  ', 'Mainnet-Node synchronisiert'],
+						quantity: 1,
+						unit: 'Tag',
+						unitPriceCents: 50_000
+					})
+				]
+			}),
+			LABELS
+		);
+		expect(model.rows[0].subtitle).toBe('Doichain Core 31.1 · Aufwand 9,5 Std.');
+		// A blank bullet is somebody's stray newline, not a bullet.
+		expect(model.rows[0].details).toEqual([
+			'LWMA und DigiShield erklärt',
+			'Mainnet-Node synchronisiert'
+		]);
 	});
 
 	it('adds up to the amount due, the way the template says it', () => {

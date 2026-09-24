@@ -176,15 +176,24 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 			labels.vat,
 			labels.lineNet
 		],
-		rows: totals.lines.map((line, index) => [
-			String(index + 1),
-			String(line.description ?? ''),
-			formatQuantity(line.quantity),
-			String(line.unit ?? ''),
-			formatAmount(line.unitPriceCents),
-			invoice.taxMode === 'standard' ? `${line.vatRate} %` : '—',
-			formatAmount(line.netCents)
-		]),
+		/**
+		 * One row per line: the figures, and underneath them whatever explains
+		 * the line. Named rather than positional, because a row with a subtitle
+		 * and four bullets under it is no longer a list of seven strings.
+		 */
+		rows: totals.lines.map((line, index) => ({
+			position: String(index + 1),
+			description: String(line.description ?? ''),
+			subtitle: String(line.subtitle ?? '').trim(),
+			details: (line.details ?? [])
+				.map((/** @type {unknown} */ detail) => String(detail ?? '').trim())
+				.filter(Boolean),
+			quantity: formatQuantity(line.quantity),
+			unit: String(line.unit ?? ''),
+			unitPrice: formatAmount(line.unitPriceCents),
+			vat: invoice.taxMode === 'standard' ? `${line.vatRate} %` : '—',
+			net: formatAmount(line.netCents)
+		})),
 		/** The summing block, ending on the amount somebody has to pay. */
 		totals: [
 			{ label: labels.subtotal, value: formatAmount(totals.netTotalCents) },

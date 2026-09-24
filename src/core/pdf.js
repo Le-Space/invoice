@@ -265,6 +265,8 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 		[COLUMN.vat, model.columns[5], true],
 		[COLUMN.net, model.columns[6], true]
 	];
+	/** Bullets sit in from the description, and their text wraps under itself. */
+	const BULLET_INDENT = 10;
 	const header = () => {
 		for (const [x, label, alignRight] of columns) {
 			write(String(label), {
@@ -285,21 +287,53 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	header();
 
 	for (const row of model.rows) {
-		const description = wrap(String(row[1]), regular, SIZE.body, DESCRIPTION_WIDTH);
-		if (room(28 + description.length * 13)) header();
-		row.forEach((cell, index) => {
-			if (index === 1) return;
-			const [x, , alignRight] = columns[index];
-			write(String(cell), {
-				size: SIZE.body,
-				...(alignRight ? { alignRight: Number(x) } : { x: Number(x) })
+		// A line is its own little block: what it is, what it was about, and
+		// what was actually done. The figures sit on the first line of it.
+		const title = wrap(row.description, bold, SIZE.body, DESCRIPTION_WIDTH);
+		const subtitle = row.subtitle ? wrap(row.subtitle, regular, SIZE.small, DESCRIPTION_WIDTH) : [];
+		const details = row.details.map((/** @type {string} */ detail) =>
+			wrap(detail, regular, SIZE.small, DESCRIPTION_WIDTH - BULLET_INDENT)
+		);
+		const detailLines = details.reduce((sum, lines) => sum + lines.length, 0);
+		const height = title.length * 14 + subtitle.length * 11 + detailLines * 11 + 12;
+		if (room(Math.min(height, 200) + 20)) header();
+
+		write(row.position, { x: COLUMN.position, size: SIZE.body });
+		write(row.quantity, { alignRight: COLUMN.quantity, size: SIZE.body });
+		write(row.unit, { x: COLUMN.unit, size: SIZE.body });
+		write(row.unitPrice, { alignRight: COLUMN.unitPrice, size: SIZE.body });
+		write(row.vat, { alignRight: COLUMN.vat, size: SIZE.body });
+		write(row.net, { alignRight: COLUMN.net, size: SIZE.body });
+
+		title.forEach((line, index) => {
+			if (index > 0) y -= 14;
+			write(line, { x: COLUMN.description, size: SIZE.body, font: bold });
+		});
+		y -= 13;
+
+		for (const line of subtitle) {
+			write(line, { x: COLUMN.description, size: SIZE.small, color: faint });
+			y -= 11;
+		}
+
+		for (const detail of details) {
+			detail.forEach((line, index) => {
+				room(24);
+				if (index === 0) {
+					page.drawText('-', {
+						x: COLUMN.description,
+						y,
+						size: SIZE.small,
+						font: regular,
+						color: ink
+					});
+				}
+				write(line, { x: COLUMN.description + BULLET_INDENT, size: SIZE.small });
+				y -= 11;
 			});
-		});
-		description.forEach((line, index) => {
-			if (index > 0) y -= 13;
-			write(line, { x: COLUMN.description, size: SIZE.body });
-		});
-		y -= 16;
+		}
+
+		y -= subtitle.length > 0 || details.length > 0 ? 8 : 3;
 	}
 
 	page.drawLine({
