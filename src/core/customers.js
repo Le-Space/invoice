@@ -11,6 +11,16 @@
  * honour: a reference would rewrite history, a copy cannot. `issue()` takes
  * that snapshot; nothing here is read again once an invoice has gone out.
  *
+ * **Sealing is decided, not built.** The directory stays in this list, and the
+ * list's own database gets OrbitDB's `encryption` option — `payloadEncryption`
+ * in `entry-encryption.js`, the machinery this chapter already carries from
+ * `privacy01`. The key comes from the passkey rather than from local storage:
+ * the provider exports `extractPrfSeedFromCredential`, so one passkey opens the
+ * list on every device it is present on, and a list somebody else holds is
+ * blocks they cannot read. `database-keys.js` is the seam that changes; what it
+ * calls "Phase 2" is this. Until then the directory is readable by whoever the
+ * list is shared with, which is why invoices belong in a list of your own.
+ *
  * **What "delete" can and cannot mean.** A customer record is personal data,
  * and Art. 17 GDPR gives a person the right to have it erased. A replicated
  * append-only log cannot forget: marking an entry deleted hides it here and
