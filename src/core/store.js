@@ -9,6 +9,9 @@ import { derived, writable } from 'svelte/store';
 /** @type {import('svelte/store').Writable<any[]>} */
 export const invoicesStore = writable([]);
 
+/** The customer directory of the open list. */
+export const customersStore = writable(/** @type {any[]} */ ([]));
+
 /** Raw settings as they sit in the list; null until a list is open. */
 export const invoiceSettingsStore = writable(/** @type {any} */ (null));
 
