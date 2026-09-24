@@ -33,8 +33,26 @@ describe('normaliseInvoiceSettings', () => {
 		};
 		const settings = normaliseInvoiceSettings(stored, ALICE);
 		expect(settings.issuer.name).toBe('Wolkenfabrik UG');
-		expect(settings.issuer.iban).toBe('');
 		expect(settings.paymentTermsDays).toBe(30);
+	});
+
+	it('fills in the footer groups an older settings entry never had', () => {
+		// The issuer grew a bank, a register entry and crypto addresses after
+		// the first invoices were written. Reading those settings back must not
+		// produce an issuer without a bank.
+		const stored = { issuer: { name: 'Wolkenfabrik UG', address: 'Musterstadt' } };
+		const { issuer } = normaliseInvoiceSettings(stored, ALICE);
+		expect(issuer.bank).toEqual({ name: '', iban: '', bic: '' });
+		expect(issuer.register).toEqual({ court: '', number: '', managingDirector: '' });
+		expect(issuer.crypto).toEqual({ btc: '', eth: '' });
+		expect(issuer.logo).toBe('');
+	});
+
+	it('keeps a bank somebody has already filled in', () => {
+		const stored = { issuer: { name: 'Wolkenfabrik UG', bank: { iban: 'DE00 0000' } } };
+		const { issuer } = normaliseInvoiceSettings(stored, ALICE);
+		expect(issuer.bank.iban).toBe('DE00 0000');
+		expect(issuer.bank.bic).toBe('');
 	});
 
 	it('gives a second device its own circle without touching the first one', () => {

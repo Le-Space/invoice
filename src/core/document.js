@@ -11,7 +11,8 @@
  * carries its own copy of the addresses and totals.
  */
 
-import { formatEuro } from './money.js';
+import { giroCodePayload, remittanceFor } from './girocode.js';
+import { formatAmount } from './money.js';
 import { invoiceTotals } from './records.js';
 
 /** @typedef {Record<string, string>} Labels */
@@ -78,9 +79,32 @@ function asLines(parts) {
 		.filter((line) => line !== '');
 }
 
+/**
+ * An IBAN in groups of four, the way it is printed and read aloud.
+ *
+ * @param {unknown} value
+ */
+export function formatIban(value) {
+	const account = String(value ?? '')
+		.replace(/\s+/g, '')
+		.toUpperCase();
+	return account.replace(/(.{4})/g, '$1 ').trim();
+}
+
 /** @param {number} quantity */
 function formatQuantity(quantity) {
 	return new Intl.NumberFormat('de-DE', { maximumFractionDigits: 4 }).format(quantity);
+}
+
+/**
+ * A label and its value, as the header and footer print them: "IBAN: DE…".
+ *
+ * @param {string} label
+ * @param {unknown} value
+ */
+function pair(label, value) {
+	const text = String(value ?? '').trim();
+	return text === '' ? null : { label, value: text };
 }
 
 /**
@@ -94,33 +118,59 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 	const totals = invoiceTotals(invoice);
 	const issuer = invoice.issuer ?? {};
 	const customer = invoice.customer ?? {};
+	const bank = issuer.bank ?? {};
+	const register = issuer.register ?? {};
+	const crypto = issuer.crypto ?? {};
 	const due = dueDay(invoice.issueDate, invoice.paymentTermsDays);
+	const address = asLines([issuer.address]);
+
+	const registerEntry = [register.court, register.number].filter(Boolean).join(', ');
+	const reference = remittanceFor(invoice.number, labels);
 
 	return {
-		/** Top right, above the address field. */
-		issuer: asLines([
-			issuer.name,
-			issuer.address,
-			issuer.email,
-			issuer.vatId && `${labels.vatId}: ${issuer.vatId}`
-		]),
+		/** A PNG data URL, drawn top left, or '' when nobody uploaded one. */
+		logo: String(issuer.logo ?? ''),
+		/**
+		 * The block top right: who is charging, and how to reach them.
+		 *
+		 * @type {{ label: string, value: string, strong?: boolean }[]}
+		 */
+		header: /** @type {{ label: string, value: string, strong?: boolean }[]} */ (
+			[
+				{ label: '', value: String(issuer.name ?? ''), strong: true },
+				...address.map((line) => ({ label: '', value: line })),
+				pair(labels.register, registerEntry),
+				pair(labels.vatId, issuer.vatId),
+				pair(labels.taxNumber, issuer.taxNumber),
+				pair(labels.email, issuer.email),
+				pair(labels.phone, issuer.phone),
+				pair(labels.web, issuer.web)
+			].filter(Boolean)
+		),
+		/** The line above the address field, as the post expects it. */
+		sender: [issuer.name, ...address].filter(Boolean).join(' · '),
+		/** Kept for the sender line and for anything that wants the raw block. */
+		issuer: asLines([issuer.name, issuer.address, issuer.email]),
 		/** The address field, as it goes into a window envelope. */
 		recipient: asLines([
 			customer.name,
 			customer.address,
-			customer.vatId && `${labels.vatId}: ${customer.vatId}`
+			customer.vatId && `${labels.vatId} ${customer.vatId}`
 		]),
-		title: `${invoice.cancels ? labels.titleCancellation : labels.title} ${invoice.number}`,
+		title: invoice.cancels ? labels.titleCancellation : labels.title,
+		number: String(invoice.number ?? ''),
 		/** Label/value pairs beside the title. */
 		meta: /** @type {[string, string][]} */ ([
 			[labels.invoiceDate, formatDay(invoice.issueDate, locale)],
 			[labels.deliveryDate, formatDay(invoice.deliveryDate, locale)],
+			...(due ? [[labels.dueDate, formatDay(due, locale)]] : []),
 			...(invoice.cancels ? [[labels.cancels, invoice.cancels]] : [])
 		]),
 		columns: [
 			labels.position,
 			labels.description,
 			labels.quantity,
+			labels.unit,
 			labels.unitPrice,
 			labels.vat,
 			labels.lineNet
@@ -128,24 +178,81 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 		rows: totals.lines.map((line, index) => [
 			String(index + 1),
 			String(line.description ?? ''),
-			`${formatQuantity(line.quantity)} ${line.unit ?? ''}`.trim(),
-			formatEuro(line.unitPriceCents),
+			formatQuantity(line.quantity),
+			String(line.unit ?? ''),
+			formatAmount(line.unitPriceCents),
 			invoice.taxMode === 'standard' ? `${line.vatRate} %` : '—',
-			formatEuro(line.netCents)
+			formatAmount(line.netCents)
 		]),
+		/** The summing block, ending on the amount somebody has to pay. */
 		totals: [
-			[labels.netTotal, formatEuro(totals.netTotalCents)],
-			...totals.vatBreakdown
-				.filter(() => invoice.taxMode === 'standard')
-				.map((group) => [`${labels.vat} ${group.rate} %`, formatEuro(group.taxCents)]),
-			[labels.grossTotal, formatEuro(totals.grossTotalCents)]
+			{ label: labels.subtotal, value: formatAmount(totals.netTotalCents) },
+			...(invoice.taxMode === 'standard'
+				? totals.vatBreakdown.map((group) => ({
+						label: labels.vatOf
+							.replace('{rate}', String(group.rate))
+							.replace('{base}', formatAmount(group.taxableCents)),
+						value: formatAmount(group.taxCents)
+					}))
+				: []),
+			{ label: labels.totalCurrency, value: formatAmount(totals.grossTotalCents), strong: true },
+			{ label: labels.amountDue, value: formatAmount(totals.dueCents), due: true }
 		],
 		/** §19 UStG or §13b UStG, whichever the tax mode requires. */
 		note: invoice.noteCode ? labels[invoice.noteCode] : '',
+		netNote: labels.netNote ?? '',
 		payment: due
-			? labels.paymentTerms.replace('{date}', formatDay(due, locale))
+			? labels.paymentTerms
+					.replace('{amount}', `${formatAmount(totals.dueCents)} EUR`)
+					.replace('{date}', formatDay(due, locale))
+					.replace('{number}', String(invoice.number ?? ''))
 			: labels.paymentOnReceipt,
-		iban: issuer.iban ? `${labels.iban}: ${issuer.iban}` : '',
+		/**
+		 * The transfer, as a banking app can read it. Absent where there is no
+		 * IBAN to pay into, or nothing to pay — a Storno owes money the other
+		 * way, and no credit transfer can carry that.
+		 */
+		giro: (() => {
+			const payload = giroCodePayload({
+				iban: bank.iban,
+				bic: bank.bic,
+				name: issuer.name,
+				amountCents: totals.dueCents,
+				reference
+			});
+			return payload ? { payload, caption: labels.giroCaption, hint: labels.giroHint } : null;
+		})(),
+		/**
+		 * The three lines every page carries at its foot; a line nobody filled
+		 * in is left out rather than printed as a bare label.
+		 *
+		 * @type {{ label: string, value: string }[][]}
+		 */
+		footer: /** @type {{ label: string, value: string }[][]} */ (
+			[
+				[
+					pair('', issuer.name),
+					pair('', address.join(' · ')),
+					pair(labels.email, issuer.email),
+					pair(labels.phone, issuer.phone)
+				],
+				[
+					pair(labels.managingDirector, register.managingDirector),
+					pair(labels.registerCourt, registerEntry),
+					pair(labels.vatId, issuer.vatId),
+					pair(labels.taxNumber, issuer.taxNumber)
+				],
+				[
+					pair(labels.bank, bank.name),
+					pair(labels.iban, formatIban(bank.iban)),
+					pair(labels.bic, bank.bic),
+					pair(labels.accountHolder, issuer.name && bank.iban ? issuer.name : '')
+				],
+				[pair(labels.btc, crypto.btc), pair(labels.eth, crypto.eth)]
+			]
+				.map((line) => line.filter(Boolean))
+				.filter((line) => line.length > 0)
+		),
 		freeText: String(invoice.notes ?? '').trim()
 	};
 }
