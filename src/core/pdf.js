@@ -108,7 +108,34 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 		const width = font.widthOfTextAtSize(value, size);
 		const left =
 			alignRight !== undefined ? alignRight - width : center !== undefined ? center - width / 2 : x;
-		page.drawText(value, { x: left, y, size, font, color });
+
+		// The euro sign gets its own run, placed by us.
+		//
+		// The font is not embedded, so a viewer substitutes its own Helvetica —
+		// and where that one's euro advance differs from the metrics, everything
+		// after it shifts: a rendered page read "1.190,00 \u20ACbis zum 02.10.2026".
+		// Drawing the pieces at positions we compute makes the rest of the line
+		// independent of that glyph; at worst the sign itself sits a hair off.
+		const pieces = value.split('\u20AC');
+		if (pieces.length === 1) {
+			page.drawText(value, { x: left, y, size, font, color });
+			return;
+		}
+		let cursor = left;
+		pieces.forEach((piece, index) => {
+			// The space after the sign is drawn as advance rather than as a
+			// character: a substituted glyph wider than its metric would
+			// otherwise swallow it, which is exactly what happened.
+			const text = index > 0 ? piece.replace(/^ /, '') : piece;
+			if (text !== '') {
+				page.drawText(text, { x: cursor, y, size, font, color });
+				cursor += font.widthOfTextAtSize(text, size);
+			}
+			if (index < pieces.length - 1) {
+				page.drawText('\u20AC', { x: cursor, y, size, font, color });
+				cursor += font.widthOfTextAtSize('\u20AC ', size);
+			}
+		});
 	};
 
 	/**
@@ -344,6 +371,9 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	});
 	y -= 8;
 	write(model.netNote, { size: SIZE.small, color: faint });
+	if (model.deliveryNote) {
+		write(model.deliveryNote, { size: SIZE.small, color: faint, alignRight: COLUMN.net });
+	}
 	y -= 28;
 
 	// The sum, right under the lines it sums.

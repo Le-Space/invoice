@@ -8,6 +8,7 @@ const LABELS = {
 	invoiceDate: 'Rechnungsdatum',
 	deliveryDate: 'Leistungsdatum',
 	dueDate: 'Fälligkeitsdatum',
+	customerNumber: 'Kundennr.',
 	cancels: 'Storniert Rechnung',
 	position: 'Pos.',
 	description: 'Beschreibung',
@@ -170,17 +171,35 @@ describe('the invoice itself', () => {
 	it('adds up to the amount due, the way the template says it', () => {
 		const { totals } = documentModel(issued(), LABELS);
 		expect(totals).toEqual([
-			{ label: 'Zwischensumme ohne USt.', value: '1.000,00' },
-			{ label: 'USt. 19 % von 1.000,00', value: '190,00' },
-			{ label: 'Gesamt EUR', value: '1.190,00', strong: true },
-			{ label: 'Zu zahlender Betrag EUR', value: '1.190,00', due: true }
+			{ label: 'Zwischensumme ohne USt.', value: '1.000,00\u00A0€' },
+			{ label: 'USt. 19 % von 1.000,00\u00A0€', value: '190,00\u00A0€' },
+			{ label: 'Gesamt EUR', value: '1.190,00\u00A0€', strong: true },
+			{ label: 'Zu zahlender Betrag EUR', value: '1.190,00\u00A0€', due: true }
 		]);
+	});
+
+	it('puts the delivery date under the table, not in the head', () => {
+		// §14 Abs. 4 Nr. 6 UStG wants it on the invoice; where is ours to choose,
+		// and the head is where somebody looks for the number and the dates
+		// they act on.
+		const { meta, deliveryNote } = documentModel(issued(), LABELS);
+		expect(meta.some(([label]) => label === 'Leistungsdatum')).toBe(false);
+		expect(deliveryNote).toBe('Leistungsdatum 24.09.2026');
+	});
+
+	it('names the customer number where the customer has one', () => {
+		const withNumber = issued({
+			customer: { number: '1', name: 'Stromwerk Test AG', address: 'Probehausen', vatId: '' }
+		});
+		expect(documentModel(withNumber, LABELS).meta).toContainEqual(['Kundennr.', '1']);
+		// And says nothing where they have none, rather than printing a blank.
+		expect(documentModel(issued(), LABELS).meta.some(([l]) => l === 'Kundennr.')).toBe(false);
 	});
 
 	it('names the day, the amount and the invoice number in the payment sentence', () => {
 		const { payment, meta } = documentModel(issued(), LABELS);
 		expect(payment).toBe(
-			'Bitte überweisen Sie 1.190,00 EUR bis zum 08.10.2026 und geben Sie die Rechnungsnummer 2026-48213-001 als Verwendungszweck an.'
+			'Bitte überweisen Sie 1.190,00\u00A0€ bis zum 08.10.2026 und geben Sie die Rechnungsnummer 2026-48213-001 als Verwendungszweck an.'
 		);
 		expect(meta).toContainEqual(['Fälligkeitsdatum', '08.10.2026']);
 	});

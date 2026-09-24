@@ -14,6 +14,7 @@ export const DOCUMENT_LABEL_KEYS = [
 	'invoiceDate',
 	'deliveryDate',
 	'dueDate',
+	'customerNumber',
 	'cancels',
 	'position',
 	'description',
