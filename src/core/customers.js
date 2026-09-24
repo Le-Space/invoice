@@ -48,6 +48,7 @@ export function newCustomerId() {
 /**
  * @typedef {{
  *   id: string,
+ *   number: string,
  *   name: string,
  *   address: string,
  *   vatId: string,
@@ -68,6 +69,9 @@ export function emptyCustomer(values = {}) {
 	const now = new Date().toISOString();
 	return {
 		id: newCustomerId(),
+		// What this customer is called in the books — theirs to choose, not
+		// derived: a business migrating from another program brings its own.
+		number: '',
 		name: '',
 		address: '',
 		vatId: '',
@@ -116,7 +120,7 @@ export function activeCustomers(customers) {
 /**
  * The directory, narrowed to what somebody typed.
  *
- * @template {{ name?: string, address?: string, vatId?: string, deletedAt?: string | null }} T
+ * @template {{ name?: string, address?: string, vatId?: string, number?: string, deletedAt?: string | null }} T
  * @param {T[]} customers
  * @param {string} query
  */
@@ -127,7 +131,7 @@ export function matchCustomers(customers, query) {
 	const active = activeCustomers(customers);
 	if (needle === '') return active;
 	return active.filter((customer) =>
-		[customer.name, customer.address, customer.vatId]
+		[customer.name, customer.address, customer.vatId, customer.number]
 			.map((value) => String(value ?? '').toLowerCase())
 			.some((value) => value.includes(needle))
 	);
@@ -140,6 +144,7 @@ export function matchCustomers(customers, query) {
  */
 export function invoiceCustomerFrom(customer) {
 	return {
+		number: String(customer?.number ?? ''),
 		name: String(customer?.name ?? ''),
 		address: String(customer?.address ?? ''),
 		vatId: String(customer?.vatId ?? '')
@@ -149,12 +154,13 @@ export function invoiceCustomerFrom(customer) {
 /**
  * A directory entry from what somebody typed into an invoice.
  *
- * @param {{ name?: string, address?: string, vatId?: string }} block
+ * @param {{ name?: string, address?: string, vatId?: string, number?: string }} block
  * @param {Partial<Customer>} [values] an existing entry to update
  */
 export function customerFromInvoice(block, values = {}) {
 	return emptyCustomer({
 		...values,
+		number: String(block?.number ?? values.number ?? '').trim(),
 		name: String(block?.name ?? '').trim(),
 		address: String(block?.address ?? '').trim(),
 		vatId: String(block?.vatId ?? '').trim(),

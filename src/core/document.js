@@ -13,7 +13,7 @@
 
 import { giroCodePayload, remittanceFor } from './girocode.js';
 import { fillPlaceholders, parseTemplate, renderBlock, templateContext } from './template.js';
-import { formatAmount } from './money.js';
+import { formatAmount, formatEuro } from './money.js';
 import { invoiceTotals } from './records.js';
 
 /** @typedef {Record<string, string>} Labels */
@@ -163,7 +163,7 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 		/** Label/value pairs beside the title. */
 		meta: /** @type {[string, string][]} */ ([
 			[labels.invoiceDate, formatDay(invoice.issueDate, locale)],
-			[labels.deliveryDate, formatDay(invoice.deliveryDate, locale)],
+			...(customer.number ? [[labels.customerNumber, String(customer.number)]] : []),
 			...(due ? [[labels.dueDate, formatDay(due, locale)]] : []),
 			...(invoice.cancels ? [[labels.cancels, invoice.cancels]] : [])
 		]),
@@ -195,25 +195,37 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 			net: formatAmount(line.netCents)
 		})),
 		/** The summing block, ending on the amount somebody has to pay. */
+		// The rows stay plain and the note names the currency once, as the
+		// template does; the sum carries the sign, because that is the figure
+		// somebody looks for.
 		totals: [
-			{ label: labels.subtotal, value: formatAmount(totals.netTotalCents) },
+			{ label: labels.subtotal, value: formatEuro(totals.netTotalCents) },
 			...(invoice.taxMode === 'standard'
 				? totals.vatBreakdown.map((group) => ({
 						label: labels.vatOf
 							.replace('{rate}', String(group.rate))
-							.replace('{base}', formatAmount(group.taxableCents)),
-						value: formatAmount(group.taxCents)
+							.replace('{base}', formatEuro(group.taxableCents)),
+						value: formatEuro(group.taxCents)
 					}))
 				: []),
-			{ label: labels.totalCurrency, value: formatAmount(totals.grossTotalCents), strong: true },
-			{ label: labels.amountDue, value: formatAmount(totals.dueCents), due: true }
+			{ label: labels.totalCurrency, value: formatEuro(totals.grossTotalCents), strong: true },
+			{ label: labels.amountDue, value: formatEuro(totals.dueCents), due: true }
 		],
 		/** §19 UStG or §13b UStG, whichever the tax mode requires. */
 		note: invoice.noteCode ? labels[invoice.noteCode] : '',
 		netNote: labels.netNote ?? '',
+		/**
+		 * When the service was rendered, under the table rather than in the
+		 * head. §14 Abs. 4 Nr. 6 UStG asks for it on the invoice — the month is
+		 * enough, the place is ours to choose — and without it the recipient's
+		 * input-tax deduction is the thing at risk.
+		 */
+		deliveryNote: invoice.deliveryDate
+			? `${labels.deliveryDate} ${formatDay(invoice.deliveryDate, locale)}`
+			: '',
 		payment: due
 			? labels.paymentTerms
-					.replace('{amount}', `${formatAmount(totals.dueCents)} EUR`)
+					.replace('{amount}', formatEuro(totals.dueCents))
 					.replace('{date}', formatDay(due, locale))
 					.replace('{number}', String(invoice.number ?? ''))
 			: labels.paymentOnReceipt,
@@ -272,7 +284,7 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 				[labels.deliveryDate, formatDay(invoice.deliveryDate, locale)],
 				...(due ? [[labels.dueDate, formatDay(due, locale)]] : [])
 			]),
-			totals: [{ label: labels.amountDue, value: formatAmount(totals.dueCents), due: true }]
+			totals: [{ label: labels.amountDue, value: formatEuro(totals.dueCents), due: true }]
 		})
 	};
 }

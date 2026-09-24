@@ -44,6 +44,13 @@ describe('the directory', () => {
 		]);
 	});
 
+	it('finds by customer number too, which is how a bookkeeper looks', () => {
+		const withNumber = [
+			emptyCustomer({ id: 'c9', name: 'Zeta AG', address: 'Ulm', number: '1042' })
+		];
+		expect(matchCustomers(withNumber, '1042').map((c) => c.id)).toEqual(['c9']);
+	});
+
 	it('finds by name, address or VAT id', () => {
 		expect(matchCustomers(directory, 'stromwerk').map((c) => c.id)).toEqual(['c1']);
 		expect(matchCustomers(directory, 'berlin').map((c) => c.id)).toEqual(['c2']);
@@ -57,6 +64,7 @@ describe('the directory', () => {
 describe('between the directory and the invoice', () => {
 	it('fills an invoice’s customer block from an entry', () => {
 		expect(invoiceCustomerFrom(directory[0])).toEqual({
+			number: '',
 			name: 'Stromwerk Test AG',
 			address: 'Probehausen',
 			vatId: 'DE123456789'

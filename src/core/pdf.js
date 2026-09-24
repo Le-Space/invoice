@@ -42,7 +42,7 @@ const COLUMN = {
 const DESCRIPTION_WIDTH = 225;
 
 /**
- * What Helvetica can put on the page.
+ * What the chosen font can put on the page.
  *
  * pdf-lib throws on a character the standard fonts cannot encode, which would
  * turn a pasted em dash or a Polish name into a failed export. Everything
@@ -50,8 +50,18 @@ const DESCRIPTION_WIDTH = 225;
  *
  * @param {unknown} value
  */
-function encodable(value) {
-	return String(value ?? '')
+function encodable(value, embedded = false) {
+	const text = String(value ?? '');
+	// The embedded subset carries Latin-1, Latin Extended-A, the Romanian
+	// letters and the punctuation people paste. Everything else would come out
+	// as an empty box, so it is still folded to something close.
+	if (embedded) {
+		return text.replace(
+			/[^\u0020-\u007E\u00A0-\u00FF\u0100-\u017F\u0218-\u021B\u20AC\u2010-\u2015\u2018-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u2122\u2212]/g,
+			'?'
+		);
+	}
+	return text
 		.replace(/[\u2018\u2019\u201A\u2039\u203A]/g, "'")
 		.replace(/[\u201C\u201D\u201E]/g, '"')
 		.replace(/[\u2013\u2014]/g, '-')
@@ -81,8 +91,7 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	const pdf = await PDFDocument.create();
 	pdf.setTitle(`${model.title} ${model.number}`.trim());
 	pdf.setProducer('simple-todo invoice01');
-	const regular = await pdf.embedFont(StandardFonts.Helvetica);
-	const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+	const { regular, bold, embedded } = await embedFonts(pdf, StandardFonts);
 	const ink = rgb(0.09, 0.09, 0.11);
 	const faint = rgb(0.45, 0.45, 0.48);
 	const rule = rgb(0.78, 0.78, 0.8);
@@ -103,12 +112,39 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 			alignRight,
 			center
 		} = options;
-		const value = encodable(text);
+		const value = encodable(text, embedded);
 		if (value === '') return;
 		const width = font.widthOfTextAtSize(value, size);
 		const left =
 			alignRight !== undefined ? alignRight - width : center !== undefined ? center - width / 2 : x;
-		page.drawText(value, { x: left, y, size, font, color });
+
+		// Without an embedded font the euro sign gets its own run, placed by us.
+		//
+		// The font is not embedded, so a viewer substitutes its own Helvetica —
+		// and where that one's euro advance differs from the metrics, everything
+		// after it shifts: a rendered page read "1.190,00 \u20ACbis zum 02.10.2026".
+		// Drawing the pieces at positions we compute makes the rest of the line
+		// independent of that glyph; at worst the sign itself sits a hair off.
+		const pieces = embedded ? [value] : value.split('\u20AC');
+		if (pieces.length === 1) {
+			page.drawText(value, { x: left, y, size, font, color });
+			return;
+		}
+		let cursor = left;
+		pieces.forEach((piece, index) => {
+			// The space after the sign is drawn as advance rather than as a
+			// character: a substituted glyph wider than its metric would
+			// otherwise swallow it, which is exactly what happened.
+			const text = index > 0 ? piece.replace(/^ /, '') : piece;
+			if (text !== '') {
+				page.drawText(text, { x: cursor, y, size, font, color });
+				cursor += font.widthOfTextAtSize(text, size);
+			}
+			if (index < pieces.length - 1) {
+				page.drawText('\u20AC', { x: cursor, y, size, font, color });
+				cursor += font.widthOfTextAtSize('\u20AC ', size);
+			}
+		});
 	};
 
 	/**
@@ -123,8 +159,12 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	) => {
 		const parts = cells.flatMap((cell, index) => {
 			const prefix = index === 0 ? [] : [{ text: ' · ', font: regular, color: faint }];
-			const label = cell.label ? [{ text: encodable(cell.label), font: bold, color }] : [];
-			const value = [{ text: encodable(cell.value), font: cell.strong ? bold : regular, color }];
+			const label = cell.label
+				? [{ text: encodable(cell.label, embedded), font: bold, color }]
+				: [];
+			const value = [
+				{ text: encodable(cell.value, embedded), font: cell.strong ? bold : regular, color }
+			];
 			return [
 				...prefix,
 				...label,
@@ -235,8 +275,14 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 					if (!run) break;
 					const piece = run.text.slice(consumed - run.start, consumed - run.start + remaining);
 					const font = run.bold ? bold : regular;
-					page.drawText(encodable(piece), { x: cursor, y, size: SIZE.body, font, color: ink });
-					cursor += font.widthOfTextAtSize(encodable(piece), SIZE.body);
+					page.drawText(encodable(piece, embedded), {
+						x: cursor,
+						y,
+						size: SIZE.body,
+						font,
+						color: ink
+					});
+					cursor += font.widthOfTextAtSize(encodable(piece, embedded), SIZE.body);
 					consumed += piece.length;
 					remaining -= piece.length;
 				}
@@ -344,6 +390,9 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	});
 	y -= 8;
 	write(model.netNote, { size: SIZE.small, color: faint });
+	if (model.deliveryNote) {
+		write(model.deliveryNote, { size: SIZE.small, color: faint, alignRight: COLUMN.net });
+	}
 	y -= 28;
 
 	// The sum, right under the lines it sums.
@@ -448,6 +497,46 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	});
 
 	return pdf.save();
+}
+
+/**
+ * The font the document is drawn with.
+ *
+ * The subset in `fonts/dejavu.js` is embedded, so the file carries its own
+ * letters and no viewer substitutes anything. If that fails for any reason the
+ * export still happens, with pdf-lib's standard Helvetica and the folding that
+ * goes with it — an invoice somebody can send beats an exception.
+ *
+ * @param {any} pdf
+ * @param {any} StandardFonts
+ */
+async function embedFonts(pdf, StandardFonts) {
+	try {
+		const [{ default: fontkit }, { BOLD, REGULAR }] = await Promise.all([
+			import('@pdf-lib/fontkit'),
+			import('./fonts/dejavu.js')
+		]);
+		pdf.registerFontkit(fontkit);
+		const [regular, bold] = await Promise.all([
+			pdf.embedFont(fromBase64(REGULAR), { subset: true }),
+			pdf.embedFont(fromBase64(BOLD), { subset: true })
+		]);
+		return { regular, bold, embedded: true };
+	} catch {
+		return {
+			regular: await pdf.embedFont(StandardFonts.Helvetica),
+			bold: await pdf.embedFont(StandardFonts.HelveticaBold),
+			embedded: false
+		};
+	}
+}
+
+/** @param {string} value */
+function fromBase64(value) {
+	const binary = atob(value);
+	const bytes = new Uint8Array(binary.length);
+	for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+	return bytes;
 }
 
 /**

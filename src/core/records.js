@@ -28,6 +28,13 @@ export const INVOICE_PREFIX = 'invoice/';
 /** @typedef {'standard' | 'kleinunternehmer' | 'reverse-charge'} TaxMode */
 /** @typedef {{ name: string, address: string, vatId?: string, email?: string, iban?: string }} Party */
 /**
+ * Who the invoice is for. The customer number is theirs to keep or not: a
+ * business migrating from another program brings one, a one-off customer has
+ * none, and the document prints it only where it is there.
+ *
+ * @typedef {{ name: string, address: string, vatId?: string, number?: string }} Recipient
+ */
+/**
  * A line as it is charged, and as it is explained.
  *
  * `description` is what the line is; `subtitle` is the one-line context under
@@ -91,7 +98,7 @@ export function emptyLine(values = {}) {
 /**
  * A draft, ready to be filled in.
  *
- * @param {{ taxMode?: TaxMode, customer?: Partial<Party>, issueDate?: string }} [values]
+ * @param {{ taxMode?: TaxMode, customer?: Partial<Recipient>, issueDate?: string }} [values]
  */
 export function emptyDraft({ taxMode = 'standard', customer, issueDate } = {}) {
 	const day = issueDate ?? isoDay();
@@ -99,7 +106,13 @@ export function emptyDraft({ taxMode = 'standard', customer, issueDate } = {}) {
 		id: newInvoiceId(),
 		state: /** @type {'draft'} */ ('draft'),
 		taxMode,
-		customer: { name: '', address: '', vatId: '', ...customer },
+		customer: /** @type {Recipient} */ ({
+			number: '',
+			name: '',
+			address: '',
+			vatId: '',
+			...customer
+		}),
 		lines: [emptyLine()],
 		issueDate: day,
 		/** §14 Abs. 4 Nr. 6 UStG: the invoice says when it was delivered, not only when it was written. */
