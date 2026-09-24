@@ -208,6 +208,52 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 		y -= 13;
 	}
 
+	/**
+	 * A block from the template: paragraphs and bullets, bold where it says so.
+	 *
+	 * @param {{ kind: string, runs: { text: string, bold: boolean }[] }[]} block
+	 */
+	const writeBlock = (block) => {
+		for (const item of block) {
+			const indent = item.kind === 'bullet' ? 12 : 0;
+			const width = A4.width - MARGIN.right - MARGIN.left - indent;
+			// Bold runs are measured with the bold font, so a wrapped line is
+			// wrapped where it actually ends.
+			const text = item.runs.map((run) => run.text).join('');
+			const lines = wrap(text, regular, SIZE.body, width);
+			let consumed = 0;
+			lines.forEach((line, index) => {
+				room(30);
+				let cursor = MARGIN.left + indent;
+				if (item.kind === 'bullet' && index === 0) {
+					page.drawText('-', { x: MARGIN.left, y, size: SIZE.body, font: regular, color: ink });
+				}
+				// Walk the runs that fall inside this line.
+				let remaining = line.length;
+				while (remaining > 0) {
+					const run = runAt(item.runs, consumed);
+					if (!run) break;
+					const piece = run.text.slice(consumed - run.start, consumed - run.start + remaining);
+					const font = run.bold ? bold : regular;
+					page.drawText(encodable(piece), { x: cursor, y, size: SIZE.body, font, color: ink });
+					cursor += font.widthOfTextAtSize(encodable(piece), SIZE.body);
+					consumed += piece.length;
+					remaining -= piece.length;
+				}
+				consumed += 1; // the space the wrap consumed
+				y -= 14;
+			});
+			y -= 4;
+		}
+	};
+
+	// The letter above the lines.
+	if (model.intro.length > 0) {
+		y = Math.min(y - 8, A4.height - 322);
+		writeBlock(model.intro);
+		y -= 6;
+	}
+
 	// The lines.
 	y = Math.min(y, A4.height - 330);
 	const columns = [
@@ -310,6 +356,8 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	y -= 10;
 	const textLeft = model.giro ? 190 : MARGIN.left;
 	const textWidth = A4.width - MARGIN.right - textLeft;
+	/** Where the QR code ends, so whatever follows starts below it. */
+	let giroBottom = null;
 	if (model.giro) {
 		const top = y + 6;
 		const code = 96;
@@ -318,6 +366,7 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 		const resume = y;
 		y = top - code - 11;
 		write(model.giro.caption, { x: MARGIN.left, size: SIZE.small, font: bold, color: faint });
+		giroBottom = y - 6;
 		y = resume;
 	}
 	for (const line of wrap(model.payment, regular, SIZE.body, textWidth)) {
@@ -330,6 +379,15 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 			write(line, { x: textLeft, size: SIZE.small, color: faint });
 			y -= 12;
 		}
+	}
+
+	// The closing, under everything the invoice had to say — including the code
+	// beside the payment sentence, which reaches further down than the text.
+	if (model.closing.length > 0) {
+		if (giroBottom !== null) y = Math.min(y, giroBottom);
+		room(60);
+		y -= 18;
+		writeBlock(model.closing);
 	}
 
 	// The foot of every page, once the number of pages is known.
@@ -401,6 +459,21 @@ async function drawQrCode(page, payload, { x, top, size, ink }) {
 			});
 		}
 	}
+}
+
+/**
+ * Which run a character index falls in, with the index that run starts at.
+ *
+ * @param {{ text: string, bold: boolean }[]} runs
+ * @param {number} index
+ */
+function runAt(runs, index) {
+	let start = 0;
+	for (const run of runs) {
+		if (index < start + run.text.length) return { ...run, start };
+		start += run.text.length;
+	}
+	return null;
 }
 
 /**

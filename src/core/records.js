@@ -180,9 +180,12 @@ export function invoiceTotals(invoice) {
  * and totals are frozen, and nothing about it is rewritten afterwards.
  *
  * @param {ReturnType<typeof emptyDraft>} draft
- * @param {{ number: string, issuer: Party, issuedBy: string, issuedAt?: string }} act
+ * @param {{ number: string, issuer: Party, issuedBy: string, issuedAt?: string, template?: string }} act
  */
-export function issue(draft, { number, issuer, issuedBy, issuedAt = new Date().toISOString() }) {
+export function issue(
+	draft,
+	{ number, issuer, issuedBy, issuedAt = new Date().toISOString(), template = '' }
+) {
 	const problems = draftProblems(draft, { issuer });
 	if (problems.length > 0) {
 		throw new Error(`This invoice is not ready to be issued: ${problems[0].code}`);
@@ -200,6 +203,9 @@ export function issue(draft, { number, issuer, issuedBy, issuedAt = new Date().t
 		issuedBy,
 		issuer: { ...issuer },
 		customer: { ...draft.customer },
+		// The wording is frozen with everything else: a template edited next
+		// year must not change what last year's invoice said.
+		template,
 		lines: draft.lines.map((line) => ({ ...line })),
 		noteCode: requiredNoteCode(draft.taxMode),
 		totals: { netTotalCents, taxTotalCents, grossTotalCents, vatBreakdown },

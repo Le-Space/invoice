@@ -12,6 +12,7 @@
  */
 
 import { giroCodePayload, remittanceFor } from './girocode.js';
+import { fillPlaceholders, parseTemplate, renderBlock, templateContext } from './template.js';
 import { formatAmount } from './money.js';
 import { invoiceTotals } from './records.js';
 
@@ -253,6 +254,38 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 				.map((line) => line.filter(Boolean))
 				.filter((line) => line.length > 0)
 		),
-		freeText: String(invoice.notes ?? '').trim()
+		freeText: String(invoice.notes ?? '').trim(),
+		/** The wording from the template, filled in and ready to draw. */
+		...renderTemplate(invoice, {
+			number: String(invoice.number ?? ''),
+			meta: /** @type {[string, string][]} */ ([
+				[labels.invoiceDate, formatDay(invoice.issueDate, locale)],
+				[labels.deliveryDate, formatDay(invoice.deliveryDate, locale)],
+				...(due ? [[labels.dueDate, formatDay(due, locale)]] : [])
+			]),
+			totals: [{ label: labels.amountDue, value: formatAmount(totals.dueCents), due: true }]
+		})
 	};
+}
+
+/**
+ * The template's blocks, with the invoice's own figures in them.
+ *
+ * @param {any} invoice
+ * @param {any} model the parts of the model a placeholder can refer to
+ */
+function renderTemplate(invoice, model) {
+	const { blocks } = parseTemplate(invoice.template ?? '');
+	const context = templateContext(model, invoice);
+	/** @type {string[]} */
+	const missing = [];
+
+	/** @param {string} name */
+	const block = (name) => {
+		const filled = fillPlaceholders(blocks[name] ?? '', context);
+		missing.push(...filled.missing);
+		return renderBlock(filled.text);
+	};
+
+	return { intro: block('intro'), closing: block('closing'), missingPlaceholders: missing };
 }

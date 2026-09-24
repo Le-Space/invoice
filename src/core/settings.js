@@ -65,7 +65,8 @@ export function emptyIssuer(values = {}) {
  *   issuer: Issuer,
  *   circles: Record<string, import('./numbering.js').NumberCircle>,
  *   taxMode: import('./records.js').TaxMode,
- *   paymentTermsDays: number
+ *   paymentTermsDays: number,
+ *   template: string
  * }}
  */
 export function defaultInvoiceSettings(identityId) {
@@ -78,7 +79,10 @@ export function defaultInvoiceSettings(identityId) {
 		// settings.
 		circles: identityId ? { [identityId]: circleForIdentity(identityId) } : {},
 		taxMode: 'standard',
-		paymentTermsDays: 14
+		paymentTermsDays: 14,
+		// The wording of the letter, as Markdown. Empty means "whatever this
+		// reader's language says by default", which the app fills in.
+		template: ''
 	};
 }
 
@@ -109,7 +113,8 @@ export function normaliseInvoiceSettings(stored, identityId) {
 		taxMode: value.taxMode ?? defaults.taxMode,
 		paymentTermsDays: Number.isInteger(value.paymentTermsDays)
 			? value.paymentTermsDays
-			: defaults.paymentTermsDays
+			: defaults.paymentTermsDays,
+		template: typeof value.template === 'string' ? value.template : defaults.template
 	};
 }
 
