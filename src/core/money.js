@@ -152,13 +152,12 @@ export function formatEuro(cents) {
 }
 
 /**
- * "1.234,56" — the same number without the sign, for the printed invoice.
+ * "1.234,56" — the same number without the sign.
  *
- * The euro sign is why: the PDF's standard font is not embedded, so the viewer
- * substitutes its own Helvetica, and where its euro glyph is narrower than the
- * metrics say, everything after it shifts left — "1.190,00 €bis zum" reached a
- * rendered page that way. The document names the currency in its headings, as
- * the invoice this template comes from does.
+ * Not a workaround any more: the PDF embeds its own font, so the euro sign
+ * renders wherever it is put. The table simply reads better without a sign on
+ * every row, and the note under it names the currency once — which is how the
+ * invoice this template comes from does it. The sum uses `formatEuro`.
  *
  * @param {number} cents
  */

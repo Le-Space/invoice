@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import de from '../i18n/de.json';
 import { documentLabels } from './labels.js';
+import { PDFName } from 'pdf-lib';
 import { invoiceFileName, invoicePdfBytes } from './pdf.js';
 import { emptyDraft, emptyLine, issue } from './records.js';
 
@@ -81,6 +82,29 @@ describe('invoicePdfBytes', () => {
 			LABELS
 		);
 		expect(new TextDecoder().decode(broken.slice(0, 5))).toBe('%PDF-');
+	});
+
+	it('carries its own letters, so no viewer substitutes any', async () => {
+		// The whole reason the font is embedded: a substituted Helvetica drew
+		// the euro sign wider than its metrics and swallowed the space after it.
+		const { PDFDocument } = await import('pdf-lib');
+		const bytes = await invoicePdfBytes(invoice, LABELS);
+		const loaded = await PDFDocument.load(bytes);
+		const resources = /** @type {any} */ (loaded.getPages()[0].node.Resources());
+		const fonts = /** @type {any} */ (resources.lookup(PDFName.of('Font')));
+		const names = fonts.entries().map((/** @type {any[]} */ entry) => String(entry[0]));
+		expect(names.some((/** @type {string} */ name) => name.includes('DejaVu'))).toBe(true);
+	});
+
+	it('prints a name the standard fonts would have turned into question marks', async () => {
+		// "?ukasz Wi?niewski" on a document that is evidence.
+		const polish = {
+			...invoice,
+			customer: { name: 'Łukasz Wiśniewski', address: 'Kraków', vatId: '' }
+		};
+		const bytes = await invoicePdfBytes(polish, LABELS);
+		expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe('%PDF-');
+		expect(bytes.byteLength).toBeGreaterThan(5000);
 	});
 
 	it('survives the characters people actually paste', async () => {
