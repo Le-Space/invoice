@@ -26,7 +26,7 @@ import { computeTotals } from './money.js';
 export const INVOICE_PREFIX = 'invoice/';
 
 /** @typedef {'standard' | 'kleinunternehmer' | 'reverse-charge'} TaxMode */
-/** @typedef {{ name: string, address: string, vatId?: string, email?: string }} Party */
+/** @typedef {{ name: string, address: string, vatId?: string, email?: string, iban?: string }} Party */
 /** @typedef {{ description: string, quantity: number, unit: string, unitPriceCents: number, vatRate: number }} InvoiceLine */
 /** @typedef {{ code: string, field: string, line?: number }} Problem */
 

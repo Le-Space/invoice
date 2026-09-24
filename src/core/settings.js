@@ -33,8 +33,11 @@ export function defaultInvoiceSettings(identityId) {
 	return {
 		issuer: { name: '', address: '', vatId: '', email: '', iban: '' },
 		// One circle per identity, kept under the identity it belongs to: a
-		// second device adds its own and rewrites nobody else's.
-		circles: { [identityId]: circleForIdentity(identityId) },
+		// second device adds its own and rewrites nobody else's. Before there is
+		// an identity — the page is open, the passkey is not — there is nothing
+		// to derive a series from, and settings without a series are still
+		// settings.
+		circles: identityId ? { [identityId]: circleForIdentity(identityId) } : {},
 		taxMode: 'standard',
 		paymentTermsDays: 14
 	};
@@ -54,7 +57,9 @@ export function normaliseInvoiceSettings(stored, identityId) {
 	const defaults = defaultInvoiceSettings(identityId);
 	const value = stored && typeof stored === 'object' ? /** @type {any} */ (stored) : {};
 	const circles = value.circles && typeof value.circles === 'object' ? { ...value.circles } : {};
-	if (!circles[identityId]?.pattern) circles[identityId] = defaults.circles[identityId];
+	if (identityId && !circles[identityId]?.pattern) {
+		circles[identityId] = defaults.circles[identityId];
+	}
 
 	return {
 		issuer: { ...defaults.issuer, ...(value.issuer ?? {}) },
@@ -73,7 +78,8 @@ export function normaliseInvoiceSettings(stored, identityId) {
  * @param {string} identityId
  */
 export function circleOf(settings, identityId) {
-	return settings.circles[identityId] ?? circleForIdentity(identityId);
+	if (settings.circles[identityId]) return settings.circles[identityId];
+	return identityId ? circleForIdentity(identityId) : null;
 }
 
 /**
@@ -89,5 +95,6 @@ export function circleOf(settings, identityId) {
  * @param {Date} [date]
  */
 export function nextNumberFor(settings, identityId, issuedNumbers, date = new Date()) {
-	return nextInvoiceNumber(circleOf(settings, identityId), issuedNumbers, date);
+	const circle = circleOf(settings, identityId);
+	return circle ? nextInvoiceNumber(circle, issuedNumbers, date) : '';
 }
