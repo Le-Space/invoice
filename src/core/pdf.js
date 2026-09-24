@@ -6,24 +6,37 @@
  * the person operating it. An invoice is a document that has to look the same
  * every time, carry its own file name and leave the app in one click.
  *
- * `pdf-lib` is loaded only when somebody actually exports, so the page itself
- * never pays for it. `document.js` decides what the invoice says; this file
- * only decides where it sits on the page.
+ * The layout follows the template this business already sends: the mark and the
+ * issuer's block at the top, the address field where a window envelope expects
+ * it, the lines, the sum, and on every page a foot that says who is charging,
+ * who runs the company and where the money goes.
+ *
+ * `pdf-lib` and the QR encoder are loaded only when somebody exports, so the
+ * page never pays for them. `document.js` decides what the invoice says; this
+ * file only decides where it sits.
  */
 
 import { documentModel } from './document.js';
 
 const A4 = { width: 595.28, height: 841.89 };
-const MARGIN = { left: 56, right: 56, top: 48, bottom: 64 };
-const SIZE = { small: 8, body: 10, title: 16 };
+const MARGIN = { left: 56, right: 56, top: 48, bottom: 86 };
+const SIZE = { tiny: 6.5, small: 8, body: 10, lead: 12, title: 15 };
 
 /**
  * Where each column sits. Everything that carries a number is right-aligned on
- * its edge so the digits line up; only the position and the description start
- * at a left edge. The gaps are wide enough for "1 Pauschale" beside
- * "1.000,00 EUR", which is where an earlier layout ran the two into each other.
+ * its edge so the digits line up; the position and the description start at a
+ * left edge. The gaps fit "1 Pauschale" beside "1.000,00 EUR", which is where
+ * an earlier layout ran the two into each other.
  */
-const COLUMN = { position: 56, description: 82, quantity: 370, unitPrice: 430, vat: 470, net: 539 };
+const COLUMN = {
+	position: 56,
+	description: 76,
+	quantity: 338,
+	unit: 348,
+	unitPrice: 445,
+	vat: 478,
+	net: 539
+};
 
 /** How wide a description may be before it wraps onto the next line. */
 const DESCRIPTION_WIDTH = 225;
@@ -66,83 +79,194 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	const model = documentModel(invoice, labels, { locale });
 
 	const pdf = await PDFDocument.create();
-	pdf.setTitle(`${labels.title} ${invoice.number ?? ''}`.trim());
+	pdf.setTitle(`${model.title} ${model.number}`.trim());
 	pdf.setProducer('simple-todo invoice01');
 	const regular = await pdf.embedFont(StandardFonts.Helvetica);
 	const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
 	const ink = rgb(0.09, 0.09, 0.11);
-	const faint = rgb(0.42, 0.42, 0.46);
+	const faint = rgb(0.45, 0.45, 0.48);
+	const rule = rgb(0.78, 0.78, 0.8);
 
 	let page = pdf.addPage([A4.width, A4.height]);
 	let y = A4.height - MARGIN.top;
 
 	/**
 	 * @param {string} text
-	 * @param {{ x?: number, size?: number, font?: any, color?: any, alignRight?: number }} [options]
+	 * @param {{ x?: number, size?: number, font?: any, color?: any, alignRight?: number, center?: number }} [options]
 	 */
-	const write = (
-		text,
-		{ x = MARGIN.left, size = SIZE.body, font = regular, color = ink, alignRight } = {}
-	) => {
+	const write = (text, options = {}) => {
+		const {
+			x = MARGIN.left,
+			size = SIZE.body,
+			font = regular,
+			color = ink,
+			alignRight,
+			center
+		} = options;
 		const value = encodable(text);
 		if (value === '') return;
-		const left = alignRight === undefined ? x : alignRight - font.widthOfTextAtSize(value, size);
+		const width = font.widthOfTextAtSize(value, size);
+		const left =
+			alignRight !== undefined ? alignRight - width : center !== undefined ? center - width / 2 : x;
 		page.drawText(value, { x: left, y, size, font, color });
+	};
+
+	/**
+	 * A label in bold and its value beside it, as one run.
+	 *
+	 * @param {{ label?: string, value: string, strong?: boolean }[]} cells
+	 * @param {{ size?: number, alignRight?: number, center?: number, x?: number, gap?: number, color?: any }} options
+	 */
+	const writeRun = (
+		cells,
+		{ size = SIZE.small, alignRight, center, x = MARGIN.left, gap = 4, color = ink } = {}
+	) => {
+		const parts = cells.flatMap((cell, index) => {
+			const prefix = index === 0 ? [] : [{ text: ' · ', font: regular, color: faint }];
+			const label = cell.label ? [{ text: encodable(cell.label), font: bold, color }] : [];
+			const value = [{ text: encodable(cell.value), font: cell.strong ? bold : regular, color }];
+			return [
+				...prefix,
+				...label,
+				...(cell.label ? [{ text: ' ', font: regular, color }] : []),
+				...value
+			];
+		});
+		const width = parts.reduce(
+			(sum, part) => sum + part.font.widthOfTextAtSize(part.text, size),
+			0
+		);
+		let cursor =
+			alignRight !== undefined ? alignRight - width : center !== undefined ? center - width / 2 : x;
+		for (const part of parts) {
+			page.drawText(part.text, { x: cursor, y, size, font: part.font, color: part.color });
+			cursor += part.font.widthOfTextAtSize(part.text, size);
+		}
+		return width + gap;
 	};
 
 	/** A new page when the next block would not fit. */
 	const room = (/** @type {number} */ needed) => {
-		if (y - needed > MARGIN.bottom) return;
+		if (y - needed > MARGIN.bottom) return false;
 		page = pdf.addPage([A4.width, A4.height]);
 		y = A4.height - MARGIN.top;
+		return true;
 	};
 
+	// The mark, top left. A logo nobody uploaded simply leaves the space empty.
+	if (model.logo) {
+		const image = await embedLogo(pdf, model.logo);
+		if (image) {
+			const size = 54;
+			const scale = Math.min(size / image.width, size / image.height);
+			page.drawImage(image, {
+				x: MARGIN.left,
+				y: A4.height - MARGIN.top - image.height * scale,
+				width: image.width * scale,
+				height: image.height * scale
+			});
+		}
+	}
+
 	// Who is charging, top right.
-	for (const line of model.issuer) {
-		write(line, { size: SIZE.small, color: faint, alignRight: A4.width - MARGIN.right });
-		y -= 11;
+	for (const line of model.header) {
+		writeRun([line], { size: SIZE.small, alignRight: A4.width - MARGIN.right });
+		y -= 12;
 	}
 
 	// The address field, where a window envelope expects it.
-	y = A4.height - 150;
-	// The sender line above the address field: the whole address on one line, as
-	// the post expects it, not only its first half.
-	if (model.issuer.length > 0) {
-		write(model.issuer.slice(0, 3).join(' · '), { size: 6.5, color: faint });
+	y = Math.min(y - 24, A4.height - 168);
+	write(model.sender, { size: SIZE.tiny, color: faint });
+	y -= 4;
+	page.drawLine({
+		start: { x: MARGIN.left, y },
+		end: { x: 300, y },
+		thickness: 0.5,
+		color: rule
+	});
+	y -= 14;
+	model.recipient.forEach((line, index) => {
+		write(line, { size: SIZE.body, font: index === 0 ? bold : regular });
 		y -= 14;
-	}
-	for (const line of model.recipient) {
-		write(line);
+	});
+
+	// Title and the dates beside it, right-aligned as a pair of columns.
+	y = A4.height - 250;
+	// Measured rather than guessed: "Rechnung:" sat on top of a number that was
+	// wider than the space left for it.
+	const numberWidth = bold.widthOfTextAtSize(encodable(model.number), SIZE.title);
+	write(`${model.title}:`, {
+		size: SIZE.title,
+		font: bold,
+		alignRight: COLUMN.net - numberWidth - 14
+	});
+	write(model.number, { size: SIZE.title, font: bold, alignRight: COLUMN.net });
+	y -= 22;
+	for (const [label, value] of model.meta) {
+		write(`${label}:`, { size: SIZE.small, color: faint, alignRight: 432 });
+		write(value, { size: SIZE.small, alignRight: COLUMN.net });
 		y -= 13;
 	}
 
-	// Title and the dates beside it.
-	y = A4.height - 268;
-	write(model.title, { size: SIZE.title, font: bold });
-	let metaY = y + 4;
-	for (const [label, value] of model.meta) {
-		page.drawText(encodable(`${label}: ${value}`), {
-			x: 360,
-			y: metaY,
-			size: SIZE.small,
-			font: regular,
-			color: faint
-		});
-		metaY -= 11;
+	/**
+	 * A block from the template: paragraphs and bullets, bold where it says so.
+	 *
+	 * @param {{ kind: string, runs: { text: string, bold: boolean }[] }[]} block
+	 */
+	const writeBlock = (block) => {
+		for (const item of block) {
+			const indent = item.kind === 'bullet' ? 12 : 0;
+			const width = A4.width - MARGIN.right - MARGIN.left - indent;
+			// Bold runs are measured with the bold font, so a wrapped line is
+			// wrapped where it actually ends.
+			const text = item.runs.map((run) => run.text).join('');
+			const lines = wrap(text, regular, SIZE.body, width);
+			let consumed = 0;
+			lines.forEach((line, index) => {
+				room(30);
+				let cursor = MARGIN.left + indent;
+				if (item.kind === 'bullet' && index === 0) {
+					page.drawText('-', { x: MARGIN.left, y, size: SIZE.body, font: regular, color: ink });
+				}
+				// Walk the runs that fall inside this line.
+				let remaining = line.length;
+				while (remaining > 0) {
+					const run = runAt(item.runs, consumed);
+					if (!run) break;
+					const piece = run.text.slice(consumed - run.start, consumed - run.start + remaining);
+					const font = run.bold ? bold : regular;
+					page.drawText(encodable(piece), { x: cursor, y, size: SIZE.body, font, color: ink });
+					cursor += font.widthOfTextAtSize(encodable(piece), SIZE.body);
+					consumed += piece.length;
+					remaining -= piece.length;
+				}
+				consumed += 1; // the space the wrap consumed
+				y -= 14;
+			});
+			y -= 4;
+		}
+	};
+
+	// The letter above the lines.
+	if (model.intro.length > 0) {
+		y = Math.min(y - 8, A4.height - 322);
+		writeBlock(model.intro);
+		y -= 6;
 	}
-	y -= 34;
 
 	// The lines.
-	// Everything but the position and the description is right-aligned: a
-	// left-aligned quantity ran "1 Pauschale" into the price beside it.
+	y = Math.min(y, A4.height - 330);
 	const columns = [
 		[COLUMN.position, model.columns[0], false],
 		[COLUMN.description, model.columns[1], false],
 		[COLUMN.quantity, model.columns[2], true],
-		[COLUMN.unitPrice, model.columns[3], true],
-		[COLUMN.vat, model.columns[4], true],
-		[COLUMN.net, model.columns[5], true]
+		[COLUMN.unit, model.columns[3], false],
+		[COLUMN.unitPrice, model.columns[4], true],
+		[COLUMN.vat, model.columns[5], true],
+		[COLUMN.net, model.columns[6], true]
 	];
+	/** Bullets sit in from the description, and their text wraps under itself. */
+	const BULLET_INDENT = 10;
 	const header = () => {
 		for (const [x, label, alignRight] of columns) {
 			write(String(label), {
@@ -156,62 +280,234 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 			start: { x: MARGIN.left, y },
 			end: { x: A4.width - MARGIN.right, y },
 			thickness: 0.7,
-			color: faint
+			color: rule
 		});
-		y -= 14;
+		y -= 15;
 	};
 	header();
 
 	for (const row of model.rows) {
-		const description = wrap(String(row[1]), regular, SIZE.body, DESCRIPTION_WIDTH);
-		room(30 + description.length * 13);
-		if (y === A4.height - MARGIN.top) header();
+		// A line is its own little block: what it is, what it was about, and
+		// what was actually done. The figures sit on the first line of it.
+		const title = wrap(row.description, bold, SIZE.body, DESCRIPTION_WIDTH);
+		const subtitle = row.subtitle ? wrap(row.subtitle, regular, SIZE.small, DESCRIPTION_WIDTH) : [];
+		const details = row.details.map((/** @type {string} */ detail) =>
+			wrap(detail, regular, SIZE.small, DESCRIPTION_WIDTH - BULLET_INDENT)
+		);
+		const detailLines = details.reduce((sum, lines) => sum + lines.length, 0);
+		const height = title.length * 14 + subtitle.length * 11 + detailLines * 11 + 12;
+		if (room(Math.min(height, 200) + 20)) header();
 
-		// The first line of the description carries the figures; a description
-		// that needs more lines gets them underneath, still in its own column.
-		row.forEach((cell, index) => {
-			if (index === 1) return;
-			const [x, , alignRight] = columns[index];
-			write(String(cell), {
-				size: SIZE.body,
-				...(alignRight ? { alignRight: Number(x) } : { x: Number(x) })
+		write(row.position, { x: COLUMN.position, size: SIZE.body });
+		write(row.quantity, { alignRight: COLUMN.quantity, size: SIZE.body });
+		write(row.unit, { x: COLUMN.unit, size: SIZE.body });
+		write(row.unitPrice, { alignRight: COLUMN.unitPrice, size: SIZE.body });
+		write(row.vat, { alignRight: COLUMN.vat, size: SIZE.body });
+		write(row.net, { alignRight: COLUMN.net, size: SIZE.body });
+
+		title.forEach((line, index) => {
+			if (index > 0) y -= 14;
+			write(line, { x: COLUMN.description, size: SIZE.body, font: bold });
+		});
+		y -= 13;
+
+		for (const line of subtitle) {
+			write(line, { x: COLUMN.description, size: SIZE.small, color: faint });
+			y -= 11;
+		}
+
+		for (const detail of details) {
+			detail.forEach((line, index) => {
+				room(24);
+				if (index === 0) {
+					page.drawText('-', {
+						x: COLUMN.description,
+						y,
+						size: SIZE.small,
+						font: regular,
+						color: ink
+					});
+				}
+				write(line, { x: COLUMN.description + BULLET_INDENT, size: SIZE.small });
+				y -= 11;
 			});
-		});
-		description.forEach((line, index) => {
-			if (index > 0) y -= 13;
-			write(line, { x: COLUMN.description, size: SIZE.body });
-		});
-		y -= 15;
+		}
+
+		y -= subtitle.length > 0 || details.length > 0 ? 8 : 3;
 	}
 
-	// The totals, right under the line they belong to.
-	y -= 4;
 	page.drawLine({
-		start: { x: 330, y },
-		end: { x: A4.width - MARGIN.right, y },
-		thickness: 0.7,
-		color: faint
+		start: { x: MARGIN.left, y: y + 4 },
+		end: { x: A4.width - MARGIN.right, y: y + 4 },
+		thickness: 0.5,
+		color: rule
 	});
-	y -= 15;
-	model.totals.forEach(([label, value], index) => {
-		const last = index === model.totals.length - 1;
-		write(String(label), { x: 330, font: last ? bold : regular });
-		write(String(value), { alignRight: COLUMN.net, font: last ? bold : regular });
-		y -= last ? 18 : 14;
-	});
+	y -= 8;
+	write(model.netNote, { size: SIZE.small, color: faint });
+	y -= 28;
 
-	// What the tax mode obliges the invoice to say, then the payment sentence.
-	for (const text of [model.note, model.freeText, model.payment, model.iban]) {
+	// The sum, right under the lines it sums.
+	room(120);
+	for (const total of model.totals) {
+		if (total.due) {
+			y -= 8;
+			write(total.label, { x: 300, size: SIZE.lead, font: bold });
+			write(total.value, { alignRight: COLUMN.net, size: SIZE.lead, font: bold });
+			y -= 20;
+			continue;
+		}
+		// The template draws one rule, right above the total it leads to.
+		if (total.strong) {
+			page.drawLine({
+				start: { x: 300, y: y + 13 },
+				end: { x: A4.width - MARGIN.right, y: y + 13 },
+				thickness: 0.6,
+				color: rule
+			});
+		}
+		write(total.label, { x: 300, size: SIZE.body, font: total.strong ? bold : regular });
+		write(total.value, {
+			alignRight: COLUMN.net,
+			size: SIZE.body,
+			font: total.strong ? bold : regular
+		});
+		y -= 16;
+	}
+
+	// What the tax mode obliges the invoice to say.
+	for (const text of [model.note, model.freeText]) {
 		if (!text) continue;
 		room(40);
 		for (const line of wrap(text, regular, SIZE.body, A4.width - MARGIN.left - MARGIN.right)) {
-			write(line);
-			y -= 13;
+			write(line, { size: SIZE.body });
+			y -= 14;
 		}
 		y -= 6;
 	}
 
+	// How to pay, with the code that fills the transfer in.
+	room(110);
+	y -= 10;
+	const textLeft = model.giro ? 190 : MARGIN.left;
+	const textWidth = A4.width - MARGIN.right - textLeft;
+	/** Where the QR code ends, so whatever follows starts below it. */
+	let giroBottom = null;
+	if (model.giro) {
+		const top = y + 6;
+		const code = 96;
+		await drawQrCode(page, model.giro.payload, { x: MARGIN.left, top, size: code, ink });
+		// The caption belongs under the code, not across it.
+		const resume = y;
+		y = top - code - 11;
+		write(model.giro.caption, { x: MARGIN.left, size: SIZE.small, font: bold, color: faint });
+		giroBottom = y - 6;
+		y = resume;
+	}
+	for (const line of wrap(model.payment, regular, SIZE.body, textWidth)) {
+		write(line, { x: textLeft, size: SIZE.body });
+		y -= 14;
+	}
+	if (model.giro) {
+		y -= 4;
+		for (const line of wrap(model.giro.hint, regular, SIZE.small, textWidth)) {
+			write(line, { x: textLeft, size: SIZE.small, color: faint });
+			y -= 12;
+		}
+	}
+
+	// The closing, under everything the invoice had to say — including the code
+	// beside the payment sentence, which reaches further down than the text.
+	if (model.closing.length > 0) {
+		if (giroBottom !== null) y = Math.min(y, giroBottom);
+		room(60);
+		y -= 18;
+		writeBlock(model.closing);
+	}
+
+	// The foot of every page, once the number of pages is known.
+	const pages = pdf.getPages();
+	pages.forEach((sheet, index) => {
+		page = sheet;
+		y = MARGIN.bottom - 10;
+		page.drawLine({
+			start: { x: MARGIN.left, y: MARGIN.bottom + 6 },
+			end: { x: A4.width - MARGIN.right, y: MARGIN.bottom + 6 },
+			thickness: 0.5,
+			color: rule
+		});
+		for (const line of model.footer) {
+			writeRun(line, { size: SIZE.tiny, center: A4.width / 2, color: faint });
+			y -= 10;
+		}
+		write(
+			(labels.page ?? 'Seite {page} von {pages}')
+				.replace('{page}', String(index + 1))
+				.replace('{pages}', String(pages.length)) + ` · ${model.title} ${model.number}`,
+			{ size: SIZE.tiny, color: faint, center: A4.width / 2 }
+		);
+	});
+
 	return pdf.save();
+}
+
+/**
+ * The logo, if it is an image pdf-lib can embed.
+ *
+ * Uploads are stored as PNG (the settings form draws whatever was picked onto a
+ * canvas first), so this is the common case; a JPEG that arrived some other way
+ * still works, and anything else is left out rather than failing the export.
+ *
+ * @param {any} pdf
+ * @param {string} dataUrl
+ */
+async function embedLogo(pdf, dataUrl) {
+	try {
+		if (/^data:image\/png/i.test(dataUrl)) return await pdf.embedPng(dataUrl);
+		if (/^data:image\/jpe?g/i.test(dataUrl)) return await pdf.embedJpg(dataUrl);
+	} catch {
+		// A logo that cannot be read is not a reason to withhold the invoice.
+	}
+	return null;
+}
+
+/**
+ * Draw a QR code as filled squares.
+ *
+ * @param {any} page
+ * @param {string} payload
+ * @param {{ x: number, top: number, size: number, ink: any }} options
+ */
+async function drawQrCode(page, payload, { x, top, size, ink }) {
+	const { encode } = await import('uqr');
+	const code = encode(payload, { ecc: 'M' });
+	const module = size / code.size;
+	for (let row = 0; row < code.size; row += 1) {
+		for (let column = 0; column < code.size; column += 1) {
+			if (!code.data[row][column]) continue;
+			page.drawRectangle({
+				x: x + column * module,
+				y: top - (row + 1) * module,
+				width: module,
+				height: module,
+				color: ink
+			});
+		}
+	}
+}
+
+/**
+ * Which run a character index falls in, with the index that run starts at.
+ *
+ * @param {{ text: string, bold: boolean }[]} runs
+ * @param {number} index
+ */
+function runAt(runs, index) {
+	let start = 0;
+	for (const run of runs) {
+		if (index < start + run.text.length) return { ...run, start };
+		start += run.text.length;
+	}
+	return null;
 }
 
 /**

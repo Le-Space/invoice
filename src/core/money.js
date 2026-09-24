@@ -137,6 +137,10 @@ export function computeTotals(lines, taxMode = 'standard') {
 }
 
 const euroFormat = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
+const amountFormat = new Intl.NumberFormat('de-DE', {
+	minimumFractionDigits: 2,
+	maximumFractionDigits: 2
+});
 
 /**
  * "1.234,56 €" — German grouping and decimal comma, as on the printed invoice.
@@ -145,6 +149,21 @@ const euroFormat = new Intl.NumberFormat('de-DE', { style: 'currency', currency:
  */
 export function formatEuro(cents) {
 	return euroFormat.format(cents / 100);
+}
+
+/**
+ * "1.234,56" — the same number without the sign, for the printed invoice.
+ *
+ * The euro sign is why: the PDF's standard font is not embedded, so the viewer
+ * substitutes its own Helvetica, and where its euro glyph is narrower than the
+ * metrics say, everything after it shifts left — "1.190,00 €bis zum" reached a
+ * rendered page that way. The document names the currency in its headings, as
+ * the invoice this template comes from does.
+ *
+ * @param {number} cents
+ */
+export function formatAmount(cents) {
+	return amountFormat.format(cents / 100);
 }
 
 /**

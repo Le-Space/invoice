@@ -21,17 +21,57 @@ export function isInvoiceSettingsKey(key) {
 }
 
 /**
+ * Who is charging, in the detail a German invoice is expected to carry.
+ *
+ * §14 Abs. 4 UStG asks for the issuer's full name and address, their VAT id or
+ * tax number, and the invoice's own particulars. The rest of the footer — the
+ * register entry, the managing director, the bank — is not the UStG's business
+ * but §35a GmbHG's and §5 TMG's, and every invoice a business sends carries it
+ * anyway, because that is where a customer looks for where to pay.
+ *
+ * @typedef {{
+ *   name: string, address: string, vatId: string, taxNumber: string,
+ *   email: string, phone: string, web: string,
+ *   bank: { name: string, iban: string, bic: string },
+ *   crypto: { btc: string, eth: string },
+ *   register: { court: string, number: string, managingDirector: string },
+ *   logo: string
+ * }} Issuer
+ */
+
+/** @param {Partial<Issuer>} [values] @returns {Issuer} */
+export function emptyIssuer(values = {}) {
+	return {
+		name: '',
+		address: '',
+		vatId: '',
+		taxNumber: '',
+		email: '',
+		phone: '',
+		web: '',
+		...values,
+		bank: { name: '', iban: '', bic: '', ...(values.bank ?? {}) },
+		crypto: { btc: '', eth: '', ...(values.crypto ?? {}) },
+		register: { court: '', number: '', managingDirector: '', ...(values.register ?? {}) },
+		// A PNG as a data URL. It travels with the list, because a logo that
+		// lives on one device is missing from every invoice the other one writes.
+		logo: values.logo ?? ''
+	};
+}
+
+/**
  * @param {string} identityId
  * @returns {{
- *   issuer: { name: string, address: string, vatId: string, email: string, iban: string },
+ *   issuer: Issuer,
  *   circles: Record<string, import('./numbering.js').NumberCircle>,
  *   taxMode: import('./records.js').TaxMode,
- *   paymentTermsDays: number
+ *   paymentTermsDays: number,
+ *   template: string
  * }}
  */
 export function defaultInvoiceSettings(identityId) {
 	return {
-		issuer: { name: '', address: '', vatId: '', email: '', iban: '' },
+		issuer: emptyIssuer(),
 		// One circle per identity, kept under the identity it belongs to: a
 		// second device adds its own and rewrites nobody else's. Before there is
 		// an identity — the page is open, the passkey is not — there is nothing
@@ -39,7 +79,10 @@ export function defaultInvoiceSettings(identityId) {
 		// settings.
 		circles: identityId ? { [identityId]: circleForIdentity(identityId) } : {},
 		taxMode: 'standard',
-		paymentTermsDays: 14
+		paymentTermsDays: 14,
+		// The wording of the letter, as Markdown. Empty means "whatever this
+		// reader's language says by default", which the app fills in.
+		template: ''
 	};
 }
 
@@ -62,12 +105,16 @@ export function normaliseInvoiceSettings(stored, identityId) {
 	}
 
 	return {
-		issuer: { ...defaults.issuer, ...(value.issuer ?? {}) },
+		// Nested groups are filled in one by one: settings written before the
+		// footer existed carry an issuer without a bank, and reading them must
+		// not produce an issuer without a bank either.
+		issuer: emptyIssuer(value.issuer ?? {}),
 		circles,
 		taxMode: value.taxMode ?? defaults.taxMode,
 		paymentTermsDays: Number.isInteger(value.paymentTermsDays)
 			? value.paymentTermsDays
-			: defaults.paymentTermsDays
+			: defaults.paymentTermsDays,
+		template: typeof value.template === 'string' ? value.template : defaults.template
 	};
 }
 

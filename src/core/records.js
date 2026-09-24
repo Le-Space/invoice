@@ -27,7 +27,25 @@ export const INVOICE_PREFIX = 'invoice/';
 
 /** @typedef {'standard' | 'kleinunternehmer' | 'reverse-charge'} TaxMode */
 /** @typedef {{ name: string, address: string, vatId?: string, email?: string, iban?: string }} Party */
-/** @typedef {{ description: string, quantity: number, unit: string, unitPriceCents: number, vatRate: number }} InvoiceLine */
+/**
+ * A line as it is charged, and as it is explained.
+ *
+ * `description` is what the line is; `subtitle` is the one-line context under
+ * it ("Doichain Core 31.1 · Aufwand 9,5 Std."), and `details` are the bullets
+ * that say what was actually done. Both are optional and neither affects a
+ * figure — they exist because an invoice a customer can check is an invoice
+ * that gets paid.
+ *
+ * @typedef {{
+ *   description: string,
+ *   subtitle?: string,
+ *   details?: string[],
+ *   quantity: number,
+ *   unit: string,
+ *   unitPriceCents: number,
+ *   vatRate: number
+ * }} InvoiceLine
+ */
 /** @typedef {{ code: string, field: string, line?: number }} Problem */
 
 /** @param {string} key */
@@ -60,6 +78,8 @@ function isoDay(date = new Date()) {
 export function emptyLine(values = {}) {
 	return {
 		description: '',
+		subtitle: '',
+		details: [],
 		quantity: 1,
 		unit: 'Stück',
 		unitPriceCents: 0,
@@ -180,9 +200,12 @@ export function invoiceTotals(invoice) {
  * and totals are frozen, and nothing about it is rewritten afterwards.
  *
  * @param {ReturnType<typeof emptyDraft>} draft
- * @param {{ number: string, issuer: Party, issuedBy: string, issuedAt?: string }} act
+ * @param {{ number: string, issuer: Party, issuedBy: string, issuedAt?: string, template?: string }} act
  */
-export function issue(draft, { number, issuer, issuedBy, issuedAt = new Date().toISOString() }) {
+export function issue(
+	draft,
+	{ number, issuer, issuedBy, issuedAt = new Date().toISOString(), template = '' }
+) {
 	const problems = draftProblems(draft, { issuer });
 	if (problems.length > 0) {
 		throw new Error(`This invoice is not ready to be issued: ${problems[0].code}`);
@@ -200,7 +223,10 @@ export function issue(draft, { number, issuer, issuedBy, issuedAt = new Date().t
 		issuedBy,
 		issuer: { ...issuer },
 		customer: { ...draft.customer },
-		lines: draft.lines.map((line) => ({ ...line })),
+		// The wording is frozen with everything else: a template edited next
+		// year must not change what last year's invoice said.
+		template,
+		lines: draft.lines.map((line) => ({ ...line, details: [...(line.details ?? [])] })),
 		noteCode: requiredNoteCode(draft.taxMode),
 		totals: { netTotalCents, taxTotalCents, grossTotalCents, vatBreakdown },
 		updatedAt: issuedAt
