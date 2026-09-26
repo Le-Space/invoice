@@ -86,7 +86,9 @@
 			"patternMonth": "A circle that restarts every month needs the year and the month in the number.",
 			"currency": "The invoice does not know this currency.",
 			"eurRate": "An invoice in another currency than euros states its VAT in euros too: the rate, its source and its date are missing.",
-			"eurRateMonth": "The rate has to be one of the month the service was rendered in (§16(6) UStG)."
+			"eurRateMonth": "The rate has to be one of the month the service was rendered in (§16(6) UStG).",
+			"cryptoTransaction": "This booking is not a crypto transaction with a quantity and a rate.",
+			"cryptoCurrency": "A transaction can only become an invoice in euros or in its own asset."
 		},
 		"note": {
 			"kleinunternehmer": "No VAT is charged, under §19 UStG.",
@@ -228,6 +230,10 @@
 		"needsListHint": "Under “Lists” → “{action}”. The invoices then live in the same list as that list’s todos.",
 		"warning": {
 			"decimals": "This draft was written with other decimals than its currency has now. Its prices mean what they meant when written – please check before issuing."
+		},
+		"cryptoLine": {
+			"subtitle": "{quantity} {asset} at €{rate} per {asset} ({source}, {date})",
+			"transaction": "Transaction {hash}"
 		}
 	}
 }

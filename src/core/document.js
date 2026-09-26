@@ -99,7 +99,7 @@ export function formatIban(value) {
  *
  * @param {unknown} rate
  */
-function formatRate(rate) {
+export function formatRate(rate) {
 	const [whole, fraction] = String(rate ?? '')
 		.replace(',', '.')
 		.split('.');
