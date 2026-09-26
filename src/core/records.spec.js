@@ -9,7 +9,9 @@ import {
 	isInvoiceKey,
 	issue,
 	requiredNoteCode,
+	draftWarnings,
 	moneyUnit,
+	setCurrency,
 	totalsDisagree,
 	upgradeInvoice
 } from './records.js';
@@ -235,12 +237,39 @@ describe('an invoice in another currency', () => {
 		]);
 	});
 
-	it('keeps its decimals on the record, and refuses a draft whose decimals do not fit', () => {
+	it('keeps its decimals on the record, and warns when the table has others now', () => {
 		expect(nym().decimals).toBe(6);
-		// The currency changed, the decimals did not: every price would be off by 10⁴.
-		expect(codes(draftProblems(nym({ decimals: 2, eurRate: RATE }), { issuer: ISSUER }))).toEqual([
+		expect(draftWarnings(nym())).toEqual([]);
+		// Written before the table changed: still openable, still issuable,
+		// read in its own decimals — and worth a second look.
+		const older = nym({ decimals: 4, eurRate: RATE });
+		expect(draftProblems(older, { issuer: ISSUER })).toEqual([]);
+		expect(codes(draftWarnings(older))).toEqual(['invoice.warning.decimals']);
+		const invoice = issue(older, { number: '2026-00000-001', issuer: ISSUER, issuedBy: 'did' });
+		expect(invoice.decimals).toBe(4);
+		expect(codes(draftProblems(nym({ decimals: -1, eurRate: RATE }), { issuer: ISSUER }))).toEqual([
 			'invoice.problem.currency'
 		]);
+	});
+
+	it('changes a draft’s currency with its decimals, keeping the figures it showed', () => {
+		const eur = readyDraft({
+			lines: [emptyLine({ description: 'Beratung', unitPrice: '150' })]
+		});
+		const inNym = setCurrency(eur, 'NYM');
+		expect(inNym).toMatchObject({ currency: 'NYM', decimals: 6 });
+		expect(inNym.lines[0].unitPrice).toBe('1500000');
+		// Back to euros: fewer decimals, rounded once; the rate goes, it was for NYM.
+		const back = setCurrency(
+			{ ...inNym, eurRate: RATE, lines: [{ ...inNym.lines[0], unitPrice: '1505000' }] },
+			'EUR'
+		);
+		expect(back).toMatchObject({ currency: 'EUR', decimals: 2, eurRate: null });
+		expect(back.lines[0].unitPrice).toBe('151');
+		// NYM to dollars: the NYM rate says nothing about dollars.
+		expect(setCurrency({ ...inNym, eurRate: RATE }, 'USD').eurRate).toBeNull();
+		expect(setCurrency({ ...inNym, eurRate: RATE }, 'NYM').eurRate).toEqual(RATE);
+		expect(() => setCurrency(eur, 'XYZ')).toThrow();
 	});
 
 	it('wants the rate of the month the service was rendered in', () => {

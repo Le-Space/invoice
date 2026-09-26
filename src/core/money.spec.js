@@ -254,5 +254,10 @@ describe('toChainUnits', () => {
 		expect(toChainUnits('-1', 'POL')).toBe('-10000000000');
 		expect(toChainUnits('1', 'XYZ')).toBeNull();
 		expect(toChainUnits('1.5', 'ETH')).toBeNull();
+		// An invoice says its own decimals, and those decide.
+		expect(toChainUnits('150', { code: 'ETH', decimals: 2 })).toBe('1500000000000000000');
+		expect(toChainUnits('1', { code: 'ETH', decimals: 18 })).toBe('1');
+		// Finer than the chain cannot be paid.
+		expect(toChainUnits('1', { code: 'BTC', decimals: 9 })).toBeNull();
 	});
 });

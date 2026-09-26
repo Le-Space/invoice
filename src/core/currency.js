@@ -57,11 +57,18 @@ export function currencyOf(code) {
  * Ether, the same number for everything whose invoice unit is its chain unit.
  *
  * @param {string} amount integer string in the invoice's unit
- * @param {string} code
- * @returns {string | null} null for an unknown currency or an amount that is none
+ * @param {string | { code: string, decimals: number }} unit the currency, or — for
+ *   an invoice — its code with the decimals the record was written with
+ * @returns {string | null} null for an unknown currency, decimals finer than
+ *   the chain's, or an amount that is none
  */
-export function toChainUnits(amount, code) {
-	const currency = currencyOf(code);
-	if (!currency || !/^-?\d+$/.test(String(amount ?? ''))) return null;
-	return (BigInt(amount) * 10n ** BigInt(currency.unitDecimals - currency.decimals)).toString();
+export function toChainUnits(amount, unit) {
+	const currency = currencyOf(typeof unit === 'string' ? unit : unit?.code);
+	const decimals = typeof unit === 'string' ? currency?.decimals : unit?.decimals;
+	if (!currency || !Number.isInteger(decimals) || !/^-?\d+$/.test(String(amount ?? ''))) {
+		return null;
+	}
+	const shift = currency.unitDecimals - /** @type {number} */ (decimals);
+	if (shift < 0) return null;
+	return (BigInt(amount) * 10n ** BigInt(shift)).toString();
 }

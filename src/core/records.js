@@ -24,6 +24,20 @@ import { VAT_CURRENCY, currencyOf } from './currency.js';
 import { computeTotals, inEuroCents, parseRate, toUnits } from './money.js';
 
 /**
+ * Integer division rounding half away from zero, for rescaling a price.
+ *
+ * @param {bigint} numerator
+ * @param {bigint} divisor positive
+ */
+function divRound(numerator, divisor) {
+	const negative = numerator < 0n;
+	const abs = negative ? -numerator : numerator;
+	const quotient = abs / divisor;
+	const rounded = (abs - quotient * divisor) * 2n >= divisor ? quotient + 1n : quotient;
+	return negative ? -rounded : rounded;
+}
+
+/**
  * What the amounts of this invoice are in: its currency and the decimals it
  * was written with. Both are on the record, so it reads the same however the
  * table in `currency.js` changes later.
@@ -228,10 +242,10 @@ export function draftProblems(draft, { issuer } = {}) {
 	});
 
 	const currency = currencyOf(draft.currency);
-	// A draft counts in the decimals its currency has today; they are frozen
-	// with everything else when it is issued. A draft whose currency changed
-	// and whose decimals did not would read every price wrong by 10ⁿ.
-	if (!currency || draft.decimals !== currency.decimals) {
+	// The record's decimals are what its prices mean, also on a draft stored
+	// before the table in currency.js changed; `draftWarnings` says when they
+	// differ, and only decimals that are none are refused.
+	if (!currency || !Number.isInteger(draft.decimals) || draft.decimals < 0) {
 		problems.push({ code: 'invoice.problem.currency', field: 'currency' });
 	} else if (currency.code !== VAT_CURRENCY && showsVat(draft)) {
 		// Art. 230 MwStSystRL, §16 Abs. 6 UStG: the VAT is owed in euros, so an
@@ -248,6 +262,59 @@ export function draftProblems(draft, { issuer } = {}) {
 	}
 
 	return problems;
+}
+
+/**
+ * What is worth a second look before issuing, but does not stand in the way.
+ *
+ * - `invoice.warning.decimals`: the draft was written with other decimals than
+ *   its currency has now (currency.js changed since). Its prices still mean
+ *   what they meant; issuing freezes the draft's own decimals.
+ *
+ * @param {ReturnType<typeof emptyDraft>} draft
+ * @returns {Problem[]}
+ */
+export function draftWarnings(draft) {
+	draft = upgradeInvoice(draft);
+	const current = currencyOf(draft.currency)?.decimals;
+	return current !== undefined && draft.decimals !== current
+		? [{ code: 'invoice.warning.decimals', field: 'currency' }]
+		: [];
+}
+
+/**
+ * A draft in another currency: the decimals follow the currency, and every
+ * price keeps the figure it showed ("1,50" stays "1,50"), rounded half away
+ * from zero where the new currency has fewer decimals. This is the one place a
+ * draft's currency changes — setting `currency` alone would leave its prices
+ * meaning something else by 10ⁿ.
+ *
+ * @template {ReturnType<typeof emptyDraft>} D
+ * @param {D} draft
+ * @param {string} code
+ * @returns {D}
+ */
+export function setCurrency(draft, code) {
+	const target = currencyOf(code);
+	if (!target) throw new Error(`Unknown currency: ${code}`);
+	const from = moneyUnit(upgradeInvoice(draft)).decimals;
+	const shift = BigInt(target.decimals - from);
+	const rescale = (/** @type {unknown} */ price) => {
+		const units = toUnits(price);
+		if (units === null) return price;
+		return (shift >= 0n ? units * 10n ** shift : divRound(units, 10n ** -shift)).toString();
+	};
+	return {
+		...upgradeInvoice(draft),
+		currency: target.code,
+		decimals: target.decimals,
+		// A rate is for one currency; a new one has to be looked up.
+		eurRate: target.code === draft.currency ? (draft.eurRate ?? null) : null,
+		lines: (upgradeInvoice(draft).lines ?? []).map((/** @type {InvoiceLine} */ line) => ({
+			...line,
+			unitPrice: rescale(line.unitPrice)
+		}))
+	};
 }
 
 /**

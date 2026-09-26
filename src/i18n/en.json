@@ -225,6 +225,9 @@
 		},
 		"needsListHeading": "Invoices need a list of your own",
 		"needsListAction": "Go to the lists",
-		"needsListHint": "Under “Lists” → “{action}”. The invoices then live in the same list as that list’s todos."
+		"needsListHint": "Under “Lists” → “{action}”. The invoices then live in the same list as that list’s todos.",
+		"warning": {
+			"decimals": "This draft was written with other decimals than its currency has now. Its prices mean what they meant when written – please check before issuing."
+		}
 	}
 }

@@ -225,6 +225,9 @@
 		},
 		"needsListHeading": "Rechnungen brauchen eine eigene Liste",
 		"needsListAction": "Zu den Listen",
-		"needsListHint": "Unter „Listen“ → „{action}“. Die Rechnungen liegen dann in derselben Liste wie deren Aufgaben."
+		"needsListHint": "Unter „Listen“ → „{action}“. Die Rechnungen liegen dann in derselben Liste wie deren Aufgaben.",
+		"warning": {
+			"decimals": "Dieser Entwurf wurde mit anderen Nachkommastellen geschrieben, als die Währung heute hat. Die Preise gelten so, wie sie geschrieben wurden – bitte vor dem Ausstellen prüfen."
+		}
 	}
 }
