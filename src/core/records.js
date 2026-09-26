@@ -20,7 +20,8 @@
  * year's invoice must still show where they were when it was issued.
  */
 
-import { computeTotals } from './money.js';
+import { VAT_CURRENCY, currencyOf } from './currency.js';
+import { computeTotals, inEuroCents, parseRate, toUnits } from './money.js';
 
 /** Every invoice entry is keyed with this, so it is not read as a todo. */
 export const INVOICE_PREFIX = 'invoice/';
@@ -49,9 +50,20 @@ export const INVOICE_PREFIX = 'invoice/';
  *   details?: string[],
  *   quantity: number,
  *   unit: string,
- *   unitPriceCents: number,
+ *   unitPrice: string,
  *   vatRate: number
  * }} InvoiceLine
+ *
+ * `unitPrice` is net, in the smallest unit of the invoice's currency, as an
+ * integer in a string (`money.js`).
+ */
+/**
+ * What an invoice in another currency than euros states for its VAT: how many
+ * euros one whole unit was worth, by whose account, on which day. §16 Abs. 6
+ * UStG names the monthly rates of the Federal Ministry of Finance; a daily rate
+ * from a bank or an exchange needs the tax office's consent.
+ *
+ * @typedef {{ eurPerUnit: string, source: string, date: string }} EurRate
  */
 /** @typedef {{ code: string, field: string, line?: number }} Problem */
 
@@ -89,7 +101,7 @@ export function emptyLine(values = {}) {
 		details: [],
 		quantity: 1,
 		unit: 'Stück',
-		unitPriceCents: 0,
+		unitPrice: '0',
 		vatRate: 19,
 		...values
 	};
@@ -98,14 +110,18 @@ export function emptyLine(values = {}) {
 /**
  * A draft, ready to be filled in.
  *
- * @param {{ taxMode?: TaxMode, customer?: Partial<Recipient>, issueDate?: string }} [values]
+ * @param {{ taxMode?: TaxMode, currency?: string, customer?: Partial<Recipient>, issueDate?: string }} [values]
  */
-export function emptyDraft({ taxMode = 'standard', customer, issueDate } = {}) {
+export function emptyDraft({ taxMode = 'standard', currency = 'EUR', customer, issueDate } = {}) {
 	const day = issueDate ?? isoDay();
 	return {
 		id: newInvoiceId(),
 		state: /** @type {'draft'} */ ('draft'),
 		taxMode,
+		/** What every amount on this invoice is in (`currency.js`). */
+		currency,
+		/** Needed once the invoice is not in euros and shows VAT. */
+		eurRate: /** @type {EurRate | null} */ (null),
 		customer: /** @type {Recipient} */ ({
 			number: '',
 			name: '',
@@ -146,6 +162,7 @@ export function requiredNoteCode(taxMode) {
  * @returns {Problem[]}
  */
 export function draftProblems(draft, { issuer } = {}) {
+	draft = upgradeInvoice(draft);
 	/** @type {Problem[]} */
 	const problems = [];
 	const text = (/** @type {unknown} */ value) => (typeof value === 'string' ? value.trim() : '');
@@ -181,19 +198,47 @@ export function draftProblems(draft, { issuer } = {}) {
 		if (!Number.isFinite(line?.quantity) || line.quantity === 0) {
 			problems.push({ code: 'invoice.problem.lineQuantity', field: 'quantity', line: index });
 		}
-		if (!Number.isInteger(line?.unitPriceCents)) {
-			problems.push({
-				code: 'invoice.problem.lineUnitPrice',
-				field: 'unitPriceCents',
-				line: index
-			});
+		if (typeof line?.unitPrice !== 'string' || toUnits(line.unitPrice) === null) {
+			problems.push({ code: 'invoice.problem.lineUnitPrice', field: 'unitPrice', line: index });
 		}
 		if (draft.taxMode === 'standard' && ![0, 7, 19].includes(line?.vatRate)) {
 			problems.push({ code: 'invoice.problem.lineVatRate', field: 'vatRate', line: index });
 		}
 	});
 
+	const currency = currencyOf(draft.currency);
+	if (!currency) {
+		problems.push({ code: 'invoice.problem.currency', field: 'currency' });
+	} else if (currency.code !== VAT_CURRENCY && showsVat(draft) && !validEurRate(draft.eurRate)) {
+		// Art. 230 MwStSystRL, §16 Abs. 6 UStG: the VAT is owed in euros, so an
+		// invoice in dollars or NYM has to say what its VAT is in euros.
+		problems.push({ code: 'invoice.problem.eurRate', field: 'eurRate' });
+	}
+
 	return problems;
+}
+
+/**
+ * Whether the invoice states VAT at all: only in standard taxation, and only
+ * when a line is charged at a rate above zero.
+ *
+ * @param {{ taxMode?: TaxMode, lines?: { vatRate?: number }[] }} invoice
+ */
+function showsVat(invoice) {
+	return (
+		(invoice.taxMode ?? 'standard') === 'standard' &&
+		(invoice.lines ?? []).some((line) => Number(line?.vatRate) > 0)
+	);
+}
+
+/** @param {any} rate */
+function validEurRate(rate) {
+	return (
+		parseRate(rate?.eurPerUnit) !== null &&
+		typeof rate?.source === 'string' &&
+		rate.source.trim() !== '' &&
+		/^\d{4}-\d{2}-\d{2}$/.test(String(rate?.date ?? ''))
+	);
 }
 
 /**
@@ -205,7 +250,67 @@ export function draftProblems(draft, { issuer } = {}) {
  * @param {{ lines: InvoiceLine[], taxMode: TaxMode }} invoice
  */
 export function invoiceTotals(invoice) {
-	return computeTotals(invoice.lines ?? [], invoice.taxMode ?? 'standard');
+	return computeTotals(upgradeInvoice(invoice).lines ?? [], invoice.taxMode ?? 'standard');
+}
+
+/**
+ * The VAT in euro cents, for an invoice in another currency that shows VAT;
+ * null for a euro invoice, one without VAT, or one without a usable rate.
+ *
+ * @param {{ currency?: string, eurRate?: EurRate | null, taxMode?: TaxMode, lines?: any[] }} invoice
+ * @param {{ tax: string }} totals
+ * @returns {string | null}
+ */
+export function vatInEuroCents(invoice, totals) {
+	const currency = invoice.currency ?? VAT_CURRENCY;
+	if (currency === VAT_CURRENCY || !showsVat(invoice) || !validEurRate(invoice.eurRate)) {
+		return null;
+	}
+	return inEuroCents(totals.tax, currency, /** @type {EurRate} */ (invoice.eurRate).eurPerUnit);
+}
+
+/**
+ * An invoice as this module writes it, from one written by the invoice01
+ * chapter of simple-todo, which knew only euros: integer cents in numbers
+ * (`unitPriceCents`, `netTotalCents` …) become strings of the smallest unit,
+ * and the currency is said out loud. An invoice already in the new shape comes
+ * back unchanged, so a reader can pass everything it reads through here.
+ *
+ * @template {Record<string, any>} T
+ * @param {T} invoice
+ * @returns {T & { currency: string }}
+ */
+export function upgradeInvoice(invoice) {
+	if (!invoice || typeof invoice !== 'object') return invoice;
+	const lines = Array.isArray(invoice.lines)
+		? invoice.lines.map((/** @type {any} */ line) => {
+				if (!line || !('unitPriceCents' in line) || 'unitPrice' in line) return line;
+				const { unitPriceCents, ...rest } = line;
+				const units = toUnits(unitPriceCents);
+				return { ...rest, unitPrice: units === null ? unitPriceCents : units.toString() };
+			})
+		: invoice.lines;
+	/** @type {any} */
+	let totals = invoice.totals;
+	if (totals && 'grossTotalCents' in totals && !('gross' in totals)) {
+		totals = {
+			net: String(totals.netTotalCents),
+			tax: String(totals.taxTotalCents),
+			gross: String(totals.grossTotalCents),
+			vatBreakdown: (totals.vatBreakdown ?? []).map((/** @type {any} */ group) => ({
+				category: group.category,
+				rate: group.rate,
+				taxable: String(group.taxableCents),
+				tax: String(group.taxCents)
+			}))
+		};
+	}
+	return {
+		...invoice,
+		currency: invoice.currency ?? VAT_CURRENCY,
+		...(lines === undefined ? {} : { lines }),
+		...(totals === undefined ? {} : { totals })
+	};
 }
 
 /**
@@ -219,6 +324,7 @@ export function issue(
 	draft,
 	{ number, issuer, issuedBy, issuedAt = new Date().toISOString(), template = '' }
 ) {
+	draft = upgradeInvoice(draft);
 	const problems = draftProblems(draft, { issuer });
 	if (problems.length > 0) {
 		throw new Error(`This invoice is not ready to be issued: ${problems[0].code}`);
@@ -227,7 +333,8 @@ export function issue(
 		throw new Error('An issued invoice needs its number.');
 	}
 
-	const { netTotalCents, taxTotalCents, grossTotalCents, vatBreakdown } = invoiceTotals(draft);
+	const { net, tax, gross, vatBreakdown } = invoiceTotals(draft);
+	const taxInEuroCents = vatInEuroCents(draft, { tax });
 	return {
 		...draft,
 		state: /** @type {'issued'} */ ('issued'),
@@ -241,7 +348,13 @@ export function issue(
 		template,
 		lines: draft.lines.map((line) => ({ ...line, details: [...(line.details ?? [])] })),
 		noteCode: requiredNoteCode(draft.taxMode),
-		totals: { netTotalCents, taxTotalCents, grossTotalCents, vatBreakdown },
+		totals: {
+			net,
+			tax,
+			gross,
+			vatBreakdown,
+			...(taxInEuroCents === null ? {} : { taxInEuroCents })
+		},
 		updatedAt: issuedAt
 	};
 }
@@ -253,11 +366,10 @@ export function issue(
  */
 export function totalsDisagree(invoice) {
 	if (!invoice?.totals) return false;
+	const stored = upgradeInvoice(invoice).totals;
 	const computed = invoiceTotals(invoice);
 	return (
-		computed.netTotalCents !== invoice.totals.netTotalCents ||
-		computed.taxTotalCents !== invoice.totals.taxTotalCents ||
-		computed.grossTotalCents !== invoice.totals.grossTotalCents
+		computed.net !== stored.net || computed.tax !== stored.tax || computed.gross !== stored.gross
 	);
 }
 
@@ -278,11 +390,21 @@ export function cancellationFor(issued, { issueDate = isoDay() } = {}) {
 	}
 
 	return {
-		...emptyDraft({ taxMode: issued.taxMode, customer: issued.customer, issueDate }),
+		...emptyDraft({
+			taxMode: issued.taxMode,
+			currency: issued.currency ?? VAT_CURRENCY,
+			customer: issued.customer,
+			issueDate
+		}),
+		// The Storno takes back the same VAT in euros, so it states the same rate.
+		eurRate: issued.eurRate ?? null,
 		deliveryDate: issued.deliveryDate,
 		paymentTermsDays: issued.paymentTermsDays,
 		cancels: issued.number,
-		lines: issued.lines.map((line) => ({ ...line, quantity: -line.quantity }))
+		lines: upgradeInvoice(issued).lines.map((/** @type {InvoiceLine} */ line) => ({
+			...line,
+			quantity: -line.quantity
+		}))
 	};
 }
 

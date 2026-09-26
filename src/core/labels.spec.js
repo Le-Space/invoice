@@ -27,6 +27,14 @@ describe('the document’s labels', () => {
 			expect(labels.paymentTerms).toContain('{amount}');
 			expect(labels.paymentTerms).toContain('{date}');
 			expect(labels.paymentTerms).toContain('{number}');
+			expect(labels.rateNote).toContain('{currency}');
+			expect(labels.rateNote).toContain('{rate}');
+			expect(labels.rateNote).toContain('{source}');
+			expect(labels.rateNote).toContain('{date}');
+			expect(labels.paymentTermsCrypto).toContain('{amount}');
+			expect(labels.paymentTermsCrypto).toContain('{date}');
+			expect(labels.paymentTermsCrypto).toContain('{number}');
+			expect(labels.netNote).toContain('{currency}');
 			expect(labels.page).toContain('{page}');
 			expect(labels.page).toContain('{pages}');
 		}

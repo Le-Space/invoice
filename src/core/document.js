@@ -13,8 +13,9 @@
 
 import { giroCodePayload, remittanceFor } from './girocode.js';
 import { fillPlaceholders, parseTemplate, renderBlock, templateContext } from './template.js';
-import { formatAmount, formatEuro } from './money.js';
-import { invoiceTotals } from './records.js';
+import { VAT_CURRENCY, currencyOf } from './currency.js';
+import { formatAmount, formatMoney } from './money.js';
+import { invoiceTotals, upgradeInvoice, vatInEuroCents } from './records.js';
 
 /** @typedef {Record<string, string>} Labels */
 
@@ -92,6 +93,22 @@ export function formatIban(value) {
 	return account.replace(/(.{4})/g, '$1 ').trim();
 }
 
+/**
+ * A rate as it was given, with German grouping and decimal comma:
+ * "3210.98" → "3.210,98". Not rounded — it is the rate the VAT was taken at.
+ *
+ * @param {unknown} rate
+ */
+function formatRate(rate) {
+	const [whole, fraction] = String(rate ?? '')
+		.replace(',', '.')
+		.split('.');
+	const grouped = /^\d+$/.test(whole)
+		? new Intl.NumberFormat('de-DE').format(BigInt(whole))
+		: String(whole);
+	return fraction ? `${grouped},${fraction}` : grouped;
+}
+
 /** @param {number} quantity */
 function formatQuantity(quantity) {
 	return new Intl.NumberFormat('de-DE', { maximumFractionDigits: 4 }).format(quantity);
@@ -116,7 +133,11 @@ function pair(label, value) {
  * @param {{ locale?: string }} [options]
  */
 export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
+	invoice = upgradeInvoice(invoice);
 	const totals = invoiceTotals(invoice);
+	const currency = invoice.currency;
+	const money = (/** @type {string} */ amount) => formatMoney(amount, currency);
+	const taxInEuroCents = vatInEuroCents(invoice, totals);
 	const issuer = invoice.issuer ?? {};
 	const customer = invoice.customer ?? {};
 	const bank = issuer.bank ?? {};
@@ -190,30 +211,44 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 				.filter(Boolean),
 			quantity: formatQuantity(line.quantity),
 			unit: String(line.unit ?? ''),
-			unitPrice: formatAmount(line.unitPriceCents),
+			unitPrice: formatAmount(line.unitPrice, currency),
 			vat: invoice.taxMode === 'standard' ? `${line.vatRate} %` : '—',
-			net: formatAmount(line.netCents)
+			net: formatAmount(line.net, currency)
 		})),
 		/** The summing block, ending on the amount somebody has to pay. */
 		// The rows stay plain and the note names the currency once, as the
 		// template does; the sum carries the sign, because that is the figure
 		// somebody looks for.
 		totals: [
-			{ label: labels.subtotal, value: formatEuro(totals.netTotalCents) },
+			{ label: labels.subtotal, value: money(totals.net) },
 			...(invoice.taxMode === 'standard'
 				? totals.vatBreakdown.map((group) => ({
 						label: labels.vatOf
 							.replace('{rate}', String(group.rate))
-							.replace('{base}', formatEuro(group.taxableCents)),
-						value: formatEuro(group.taxCents)
+							.replace('{base}', money(group.taxable)),
+						value: money(group.tax)
 					}))
 				: []),
-			{ label: labels.totalCurrency, value: formatEuro(totals.grossTotalCents), strong: true },
-			{ label: labels.amountDue, value: formatEuro(totals.dueCents), due: true }
+			{ label: labels.totalCurrency, value: money(totals.gross), strong: true },
+			{ label: labels.amountDue, value: money(totals.due), due: true },
+			// Art. 230 MwStSystRL, §16 Abs. 6 UStG: an invoice in another
+			// currency states its VAT in euros too; the rate is in `rateNote`.
+			...(taxInEuroCents === null
+				? []
+				: [{ label: labels.vatInEuro, value: formatMoney(taxInEuroCents, VAT_CURRENCY) }])
 		],
+		/** The rate the VAT in euros was taken at, by whose account and on which day. */
+		rateNote:
+			taxInEuroCents === null
+				? ''
+				: labels.rateNote
+						.replace('{currency}', currency)
+						.replace('{rate}', formatRate(invoice.eurRate.eurPerUnit))
+						.replace('{source}', String(invoice.eurRate.source))
+						.replace('{date}', formatDay(invoice.eurRate.date, locale)),
 		/** §19 UStG or §13b UStG, whichever the tax mode requires. */
 		note: invoice.noteCode ? labels[invoice.noteCode] : '',
-		netNote: labels.netNote ?? '',
+		netNote: (labels.netNote ?? '').replace('{currency}', currency),
 		/**
 		 * When the service was rendered, under the table rather than in the
 		 * head. §14 Abs. 4 Nr. 6 UStG asks for it on the invoice — the month is
@@ -224,8 +259,9 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 			? `${labels.deliveryDate} ${formatDay(invoice.deliveryDate, locale)}`
 			: '',
 		payment: due
-			? labels.paymentTerms
-					.replace('{amount}', formatEuro(totals.dueCents))
+			? // A crypto payment goes to an address, not to the account in the footer.
+				(currencyOf(currency)?.kind === 'crypto' ? labels.paymentTermsCrypto : labels.paymentTerms)
+					.replace('{amount}', money(totals.due))
 					.replace('{date}', formatDay(due, locale))
 					.replace('{number}', String(invoice.number ?? ''))
 			: labels.paymentOnReceipt,
@@ -235,11 +271,13 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 		 * way, and no credit transfer can carry that.
 		 */
 		giro: (() => {
+			// EPC069-12 carries euros only.
+			if (currency !== VAT_CURRENCY) return null;
 			const payload = giroCodePayload({
 				iban: bank.iban,
 				bic: bank.bic,
 				name: issuer.name,
-				amountCents: totals.dueCents,
+				amountCents: Number(totals.due),
 				reference
 			});
 			return payload ? { payload, caption: labels.giroCaption, hint: labels.giroHint } : null;
@@ -284,7 +322,7 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 				[labels.deliveryDate, formatDay(invoice.deliveryDate, locale)],
 				...(due ? [[labels.dueDate, formatDay(due, locale)]] : [])
 			]),
-			totals: [{ label: labels.amountDue, value: formatEuro(totals.dueCents), due: true }]
+			totals: [{ label: labels.amountDue, value: money(totals.due), due: true }]
 		})
 	};
 }

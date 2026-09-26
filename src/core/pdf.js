@@ -41,6 +41,41 @@ const COLUMN = {
 /** How wide a description may be before it wraps onto the next line. */
 const DESCRIPTION_WIDTH = 225;
 
+/** The least room between two columns. */
+const COLUMN_GAP = 6;
+
+/**
+ * The columns for this invoice: the template's, unless a figure is wider than
+ * the template planned for. Then the columns move left from the amount, each
+ * one wide enough for its widest entry, and the description gives up the
+ * room — an invoice in Ether writes eight decimals where one in euros writes
+ * two, and a figure run into its neighbour is one nobody can read.
+ *
+ * @param {{ columns: string[], rows: Record<string, any>[] }} model
+ * @param {(text: string, font: any, size: number) => number} measure
+ * @param {{ regular: any, bold: any }} fonts
+ */
+function fitColumns(model, measure, { regular, bold }) {
+	/** @param {string} key @param {number} index of the header */
+	const widest = (key, index) =>
+		Math.max(
+			measure(String(model.columns[index] ?? ''), bold, SIZE.small),
+			...model.rows.map((row) => measure(String(row[key] ?? ''), regular, SIZE.body))
+		);
+	const vat = Math.min(COLUMN.vat, COLUMN.net - widest('net', 6) - COLUMN_GAP);
+	const unitPrice = Math.min(COLUMN.unitPrice, vat - widest('vat', 5) - COLUMN_GAP);
+	const unit = Math.min(
+		COLUMN.unit,
+		unitPrice - widest('unitPrice', 4) - COLUMN_GAP - widest('unit', 3)
+	);
+	const quantity = Math.min(COLUMN.quantity, unit - COLUMN_GAP);
+	const descriptionWidth = Math.min(
+		DESCRIPTION_WIDTH,
+		quantity - widest('quantity', 2) - COLUMN_GAP - COLUMN.description
+	);
+	return { quantity, unit, unitPrice, vat, descriptionWidth };
+}
+
 /**
  * What the chosen font can put on the page.
  *
@@ -90,7 +125,7 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 
 	const pdf = await PDFDocument.create();
 	pdf.setTitle(`${model.title} ${model.number}`.trim());
-	pdf.setProducer('simple-todo invoice01');
+	pdf.setProducer('Le-Space invoice');
 	const { regular, bold, embedded } = await embedFonts(pdf, StandardFonts);
 	const ink = rgb(0.09, 0.09, 0.11);
 	const faint = rgb(0.45, 0.45, 0.48);
@@ -302,13 +337,18 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 
 	// The lines.
 	y = Math.min(y, A4.height - 330);
+	const column = fitColumns(
+		model,
+		(text, font, size) => font.widthOfTextAtSize(encodable(text, embedded), size),
+		{ regular, bold }
+	);
 	const columns = [
 		[COLUMN.position, model.columns[0], false],
 		[COLUMN.description, model.columns[1], false],
-		[COLUMN.quantity, model.columns[2], true],
-		[COLUMN.unit, model.columns[3], false],
-		[COLUMN.unitPrice, model.columns[4], true],
-		[COLUMN.vat, model.columns[5], true],
+		[column.quantity, model.columns[2], true],
+		[column.unit, model.columns[3], false],
+		[column.unitPrice, model.columns[4], true],
+		[column.vat, model.columns[5], true],
 		[COLUMN.net, model.columns[6], true]
 	];
 	/** Bullets sit in from the description, and their text wraps under itself. */
@@ -335,20 +375,22 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	for (const row of model.rows) {
 		// A line is its own little block: what it is, what it was about, and
 		// what was actually done. The figures sit on the first line of it.
-		const title = wrap(row.description, bold, SIZE.body, DESCRIPTION_WIDTH);
-		const subtitle = row.subtitle ? wrap(row.subtitle, regular, SIZE.small, DESCRIPTION_WIDTH) : [];
+		const title = wrap(row.description, bold, SIZE.body, column.descriptionWidth);
+		const subtitle = row.subtitle
+			? wrap(row.subtitle, regular, SIZE.small, column.descriptionWidth)
+			: [];
 		const details = row.details.map((/** @type {string} */ detail) =>
-			wrap(detail, regular, SIZE.small, DESCRIPTION_WIDTH - BULLET_INDENT)
+			wrap(detail, regular, SIZE.small, column.descriptionWidth - BULLET_INDENT)
 		);
 		const detailLines = details.reduce((sum, lines) => sum + lines.length, 0);
 		const height = title.length * 14 + subtitle.length * 11 + detailLines * 11 + 12;
 		if (room(Math.min(height, 200) + 20)) header();
 
 		write(row.position, { x: COLUMN.position, size: SIZE.body });
-		write(row.quantity, { alignRight: COLUMN.quantity, size: SIZE.body });
-		write(row.unit, { x: COLUMN.unit, size: SIZE.body });
-		write(row.unitPrice, { alignRight: COLUMN.unitPrice, size: SIZE.body });
-		write(row.vat, { alignRight: COLUMN.vat, size: SIZE.body });
+		write(row.quantity, { alignRight: column.quantity, size: SIZE.body });
+		write(row.unit, { x: column.unit, size: SIZE.body });
+		write(row.unitPrice, { alignRight: column.unitPrice, size: SIZE.body });
+		write(row.vat, { alignRight: column.vat, size: SIZE.body });
 		write(row.net, { alignRight: COLUMN.net, size: SIZE.body });
 
 		title.forEach((line, index) => {
@@ -397,10 +439,25 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 
 	// The sum, right under the lines it sums.
 	room(120);
+	/**
+	 * Where the totals' labels start: at the column the template uses, or
+	 * further left, all of them together, when a long amount (eight decimals of
+	 * Ether) needs the room.
+	 */
+	const labelX = Math.min(
+		300,
+		...model.totals.map((total) => {
+			const font = total.due || total.strong ? bold : regular;
+			const size = total.due ? SIZE.lead : SIZE.body;
+			const width = (/** @type {string} */ text) =>
+				font.widthOfTextAtSize(encodable(text, embedded), size);
+			return COLUMN.net - width(total.value) - 12 - width(total.label);
+		})
+	);
 	for (const total of model.totals) {
 		if (total.due) {
 			y -= 8;
-			write(total.label, { x: 300, size: SIZE.lead, font: bold });
+			write(total.label, { x: labelX, size: SIZE.lead, font: bold });
 			write(total.value, { alignRight: COLUMN.net, size: SIZE.lead, font: bold });
 			y -= 20;
 			continue;
@@ -408,13 +465,14 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 		// The template draws one rule, right above the total it leads to.
 		if (total.strong) {
 			page.drawLine({
-				start: { x: 300, y: y + 13 },
+				start: { x: labelX, y: y + 13 },
 				end: { x: A4.width - MARGIN.right, y: y + 13 },
 				thickness: 0.6,
 				color: rule
 			});
 		}
-		write(total.label, { x: 300, size: SIZE.body, font: total.strong ? bold : regular });
+		const font = total.strong ? bold : regular;
+		write(total.label, { x: labelX, size: SIZE.body, font });
 		write(total.value, {
 			alignRight: COLUMN.net,
 			size: SIZE.body,
@@ -424,7 +482,7 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	}
 
 	// What the tax mode obliges the invoice to say.
-	for (const text of [model.note, model.freeText]) {
+	for (const text of [model.rateNote, model.note, model.freeText]) {
 		if (!text) continue;
 		room(40);
 		for (const line of wrap(text, regular, SIZE.body, A4.width - MARGIN.left - MARGIN.right)) {
