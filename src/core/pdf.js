@@ -85,7 +85,7 @@ function fitColumns(model, measure, { regular, bold }) {
  *
  * @param {unknown} value
  */
-function encodable(value, embedded = false) {
+export function encodable(value, embedded = false) {
 	const text = String(value ?? '');
 	// The embedded subset carries Latin-1, Latin Extended-A, the Romanian
 	// letters and the punctuation people paste. Everything else would come out
@@ -594,7 +594,7 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
  * @param {any} pdf
  * @param {any} StandardFonts
  */
-async function embedFonts(pdf, StandardFonts) {
+export async function embedFonts(pdf, StandardFonts) {
 	try {
 		const [{ default: fontkit }, { BOLD, REGULAR }] = await Promise.all([
 			import('@pdf-lib/fontkit'),
@@ -691,7 +691,7 @@ function runAt(runs, index) {
  * @param {number} size
  * @param {number} width
  */
-function wrap(text, font, size, width) {
+export function wrap(text, font, size, width) {
 	/** @type {string[]} */
 	const lines = [];
 	for (const paragraph of String(text).split('\n')) {
