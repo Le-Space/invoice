@@ -242,6 +242,45 @@
 		"cryptoLine": {
 			"subtitle": "{quantity} {asset} zu {rate} € je {asset} ({source}, {date})",
 			"transaction": "Transaktion {hash}"
+		},
+		"eigenbeleg": {
+			"args": "Die Angaben fehlen.",
+			"date": "Das Datum der Zahlung fehlt (JJJJ-MM-TT).",
+			"direction": "Die Richtung ist „outgoing“ oder „incoming“.",
+			"reason": "Es fehlt der Grund, warum es keinen Beleg der Gegenseite gibt.",
+			"description": "Es fehlt, wofür gezahlt wurde.",
+			"currency": "Diese Währung kennt die Rechnungs-App nicht.",
+			"amount": "Der Betrag ist keine Dezimalzahl mit höchstens so vielen Stellen, wie die Währung hat.",
+			"chain": "Die Chain ist keine CAIP-2-Kennung.",
+			"symbol": "Das Symbol des Assets fehlt.",
+			"quantity": "Die Menge ist keine Dezimalzahl.",
+			"explorerUrl": "Der Explorer-Link ist keine https-Adresse.",
+			"rate": "Der Kurs ist keine Dezimalzahl.",
+			"rateSource": "Die Quelle des Kurses fehlt.",
+			"rateAt": "Der Zeitpunkt des Kurses fehlt (ISO 8601 mit Zeitzone).",
+			"counterparty": "Die Gegenseite braucht einen Namen.",
+			"reference": "Die Referenz braucht System und Kennung.",
+			"doc": {
+				"title": "Eigenbeleg",
+				"created": "Erstellt am",
+				"date": "Datum der Zahlung",
+				"direction": "Richtung",
+				"outgoing": "Ausgabe",
+				"incoming": "Einnahme",
+				"amount": "Betrag",
+				"counterparty": "Gegenseite",
+				"description": "Wofür",
+				"reason": "Warum es keinen Beleg der Gegenseite gibt",
+				"chain": "Blockchain",
+				"quantity": "Menge",
+				"rate": "Kurs",
+				"transaction": "Transaktion",
+				"explorer": "Im Explorer",
+				"reference": "Referenz",
+				"requestedBy": "Angefordert von",
+				"note": "Dieser Eigenbeleg ersetzt einen fehlenden Beleg der Gegenseite. Er ist keine Rechnung und verbraucht keine Rechnungsnummer.",
+				"signature": "Datum, Unterschrift"
+			}
 		}
 	}
 }

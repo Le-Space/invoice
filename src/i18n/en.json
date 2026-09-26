@@ -242,6 +242,45 @@
 		"cryptoLine": {
 			"subtitle": "{quantity} {asset} at €{rate} per {asset} ({source}, {date})",
 			"transaction": "Transaction {hash}"
+		},
+		"eigenbeleg": {
+			"args": "The details are missing.",
+			"date": "The date of the payment is missing (YYYY-MM-DD).",
+			"direction": "The direction is \"outgoing\" or \"incoming\".",
+			"reason": "The reason why there is no receipt from the other side is missing.",
+			"description": "What was paid for is missing.",
+			"currency": "The invoice app does not know this currency.",
+			"amount": "The amount is not a decimal with at most as many decimals as its currency.",
+			"chain": "The chain is not a CAIP-2 id.",
+			"symbol": "The asset symbol is missing.",
+			"quantity": "The quantity is not a decimal.",
+			"explorerUrl": "The explorer link is not an https address.",
+			"rate": "The rate is not a decimal.",
+			"rateSource": "The rate source is missing.",
+			"rateAt": "The rate instant is missing (ISO 8601 with offset).",
+			"counterparty": "The counterparty needs a name.",
+			"reference": "The reference needs a system and an id.",
+			"doc": {
+				"title": "Self-issued receipt",
+				"created": "Created on",
+				"date": "Date of payment",
+				"direction": "Direction",
+				"outgoing": "Outgoing",
+				"incoming": "Incoming",
+				"amount": "Amount",
+				"counterparty": "Counterparty",
+				"description": "Paid for",
+				"reason": "Why there is no receipt from the other side",
+				"chain": "Blockchain",
+				"quantity": "Quantity",
+				"rate": "Rate",
+				"transaction": "Transaction",
+				"explorer": "In the explorer",
+				"reference": "Reference",
+				"requestedBy": "Requested by",
+				"note": "This self-issued receipt stands in for a missing receipt from the other side. It is not an invoice and uses no invoice number.",
+				"signature": "Date, signature"
+			}
 		}
 	}
 }
