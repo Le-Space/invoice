@@ -670,7 +670,7 @@ function wrap(text, font, size, width) {
 	const lines = [];
 	for (const paragraph of String(text).split('\n')) {
 		let line = '';
-		for (const word of paragraph.split(/\s+/)) {
+		for (const word of paragraph.split(/\s+/).flatMap((w) => breakLong(w, font, size, width))) {
 			const candidate = line ? `${line} ${word}` : word;
 			if (line && font.widthOfTextAtSize(encodable(candidate), size) > width) {
 				lines.push(line);
@@ -682,4 +682,32 @@ function wrap(text, font, size, width) {
 		lines.push(line);
 	}
 	return lines;
+}
+
+/**
+ * A word wider than the line, cut into pieces that fit: a transaction hash
+ * or a wallet address has no space to break at, and would otherwise run on
+ * into the columns beside it.
+ *
+ * @param {string} word
+ * @param {any} font
+ * @param {number} size
+ * @param {number} width
+ * @returns {string[]}
+ */
+function breakLong(word, font, size, width) {
+	if (font.widthOfTextAtSize(encodable(word), size) <= width) return [word];
+	/** @type {string[]} */
+	const pieces = [];
+	let piece = '';
+	for (const char of word) {
+		if (piece && font.widthOfTextAtSize(encodable(piece + char), size) > width) {
+			pieces.push(piece);
+			piece = char;
+		} else {
+			piece += char;
+		}
+	}
+	if (piece) pieces.push(piece);
+	return pieces;
 }
