@@ -22,7 +22,8 @@
 
 import { VAT_CURRENCY, currencyOf } from './currency.js';
 import { computeTotals, inEuroCents, parseRate, toUnits } from './money.js';
-import { PAYMENT_SCHEMES, payToAddress } from './payment-code.js';
+import { CURRENCY_NETWORKS, defaultNetwork, paysOn } from './networks.js';
+import { PAY_TO, payToAddress } from './payment-code.js';
 
 /**
  * Integer division rounding half away from zero, for rescaling a price.
@@ -156,6 +157,8 @@ export function emptyDraft({ taxMode = 'standard', currency = 'EUR', customer, i
 		 * from `currency.js` now rather than looked up when it is read.
 		 */
 		decimals: currencyOf(currency)?.decimals ?? 2,
+		/** The chain a crypto invoice is paid on (`networks.js`); null for fiat. */
+		network: defaultNetwork(currency),
 		/** Needed once the invoice is not in euros and shows VAT. */
 		eurRate: /** @type {EurRate | null} */ (null),
 		customer: /** @type {Recipient} */ ({
@@ -265,10 +268,19 @@ export function draftProblems(draft, { issuer } = {}) {
 	// none — or one that is not an address on that chain — cannot be paid.
 	if (
 		currency &&
-		Object.hasOwn(PAYMENT_SCHEMES, currency.code) &&
+		Object.hasOwn(PAY_TO, currency.code) &&
 		!payToAddress(currency.code, issuer?.crypto)
 	) {
 		problems.push({ code: 'invoice.problem.payAddress', field: 'issuer.crypto' });
+	}
+	// USDC on Base is not USDC on Ethereum: a crypto invoice names the network
+	// it is paid on, one its currency exists on.
+	if (
+		currency &&
+		Object.hasOwn(CURRENCY_NETWORKS, currency.code) &&
+		!paysOn(currency.code, draft.network)
+	) {
+		problems.push({ code: 'invoice.problem.network', field: 'network' });
 	}
 
 	return problems;
@@ -318,6 +330,10 @@ export function setCurrency(draft, code) {
 		...upgradeInvoice(draft),
 		currency: target.code,
 		decimals: target.decimals,
+		network:
+			target.code === draft.currency
+				? (upgradeInvoice(draft).network ?? null)
+				: defaultNetwork(target.code),
 		// A rate is for one currency; a new one has to be looked up.
 		eurRate: target.code === draft.currency ? (draft.eurRate ?? null) : null,
 		lines: (upgradeInvoice(draft).lines ?? []).map((/** @type {InvoiceLine} */ line) => ({
@@ -423,6 +439,12 @@ export function upgradeInvoice(invoice) {
 		currency: invoice.currency ?? VAT_CURRENCY,
 		// invoice01 knew only euro cents; anything newer carries its own.
 		decimals: invoice.decimals ?? (invoice.currency ? currencyOf(invoice.currency)?.decimals : 2),
+		// Before invoices named their network, a crypto invoice was paid on the
+		// first network of its currency: Ethereum for ETH and USDC.
+		network:
+			invoice.network === undefined
+				? defaultNetwork(invoice.currency ?? VAT_CURRENCY)
+				: invoice.network,
 		...(lines === undefined ? {} : { lines }),
 		...(totals === undefined ? {} : { totals })
 	};
@@ -515,6 +537,7 @@ export function cancellationFor(issued, { issueDate = isoDay() } = {}) {
 		// rate — the one of the invoice it cancels, never today's — and counts
 		// in the same decimals.
 		decimals: moneyUnit(issued).decimals,
+		network: upgradeInvoice(issued).network,
 		eurRate: issued.eurRate ?? null,
 		deliveryDate: issued.deliveryDate,
 		paymentTermsDays: issued.paymentTermsDays,

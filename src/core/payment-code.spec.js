@@ -23,7 +23,8 @@ describe('cryptoPaymentCode', () => {
 		expect(code('BTC', 8)).toEqual({
 			payload: `bitcoin:${BTC}?amount=0.0015&label=Wolkenfabrik%20UG&message=Rechnung%202026-00000-001`,
 			address: BTC,
-			withAmount: true
+			withAmount: true,
+			network: 'Bitcoin'
 		});
 	});
 
@@ -44,7 +45,12 @@ describe('cryptoPaymentCode', () => {
 	});
 
 	it('gives the address alone for NYM and AKT, where wallets agree on no URI', () => {
-		expect(code('NYM', 6)).toEqual({ payload: NYM, address: NYM, withAmount: false });
+		expect(code('NYM', 6)).toEqual({
+			payload: NYM,
+			address: NYM,
+			withAmount: false,
+			network: 'Nyx'
+		});
 		expect(code('AKT', 6)?.payload).toBe(AKT);
 	});
 
@@ -60,6 +66,41 @@ describe('cryptoPaymentCode', () => {
 				crypto: {}
 			})
 		).toBeNull();
+	});
+});
+
+describe('the network a code is for', () => {
+	const on = (/** @type {string} */ currency, /** @type {string} */ network, due = '119000000') =>
+		cryptoPaymentCode({
+			currency,
+			network,
+			unit: { code: currency, decimals: currency === 'USDC' ? 6 : 8 },
+			due,
+			crypto
+		});
+
+	it('asks for USDC through the contract of the chain it is paid on', () => {
+		expect(on('USDC', 'base')?.payload).toBe(
+			`ethereum:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913@8453/transfer?address=${ETH}&uint256=119000000`
+		);
+		expect(on('USDC', 'polygon')?.payload).toMatch(
+			/^ethereum:0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359@137\//
+		);
+		expect(on('USDC', 'arbitrum')?.payload).toMatch(/@42161\//);
+		expect(on('USDC', 'optimism')?.payload).toMatch(/@10\//);
+	});
+
+	it('asks for Ether on the chain it is paid on', () => {
+		expect(on('ETH', 'base', '150000')?.payload).toBe(
+			`ethereum:${ETH}@8453?value=1500000000000000`
+		);
+		expect(on('ETH', 'arbitrum', '150000')?.network).toBe('Arbitrum');
+	});
+
+	it('gives none for a network the currency is not on', () => {
+		expect(on('ETH', 'polygon')).toBeNull();
+		expect(on('NYM', 'base')).toBeNull();
+		expect(on('USDC', 'nowhere')).toBeNull();
 	});
 });
 

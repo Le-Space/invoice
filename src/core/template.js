@@ -95,6 +95,10 @@ export function templateContext(model, invoice) {
 		date: meta[Object.keys(meta)[0]] ?? '',
 		due: model.meta.find((/** @type {any} */ pair) => /f(ä|ae)llig|due/i.test(pair[0]))?.[1] ?? '',
 		amount: total.value,
+		currency: invoice.currency ?? 'EUR',
+		/** The chain a crypto invoice is paid on, and the address it is paid to. */
+		network: model.payCode?.network ?? '',
+		payTo: model.payCode?.to ?? '',
 		customer: {
 			name: customer.name ?? '',
 			address: (customer.address ?? '').replace(/\n/g, ', '),
@@ -121,6 +125,10 @@ export function templateContext(model, invoice) {
 		faellig: values.due,
 		fällig: values.due,
 		betrag: values.amount,
+		waehrung: values.currency,
+		währung: values.currency,
+		netzwerk: values.network,
+		adresse: values.payTo,
 		kunde: {
 			name: values.customer.name,
 			anschrift: values.customer.address,

@@ -328,6 +328,19 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 		}
 	};
 
+	/**
+	 * How far down a block reaches, drawn as `writeBlock` draws it.
+	 *
+	 * @param {any[]} block
+	 */
+	const blockHeight = (block) =>
+		block.reduce((sum, item) => {
+			const indent = item.kind === 'bullet' ? 12 : 0;
+			const width = A4.width - MARGIN.right - MARGIN.left - indent;
+			const text = item.runs.map((/** @type {any} */ run) => run.text).join('');
+			return sum + wrap(text, regular, SIZE.body, width).length * 14 + 4;
+		}, 0);
+
 	// The letter above the lines.
 	if (model.intro.length > 0) {
 		y = Math.min(y - 8, A4.height - 322);
@@ -537,7 +550,9 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	// beside the payment sentence, which reaches further down than the text.
 	if (model.closing.length > 0) {
 		if (giroBottom !== null) y = Math.min(y, giroBottom);
-		room(60);
+		// The closing stays together: a signature alone on a page of its own
+		// is what the fixed guess of 60 points produced.
+		room(18 + blockHeight(model.closing));
 		y -= 18;
 		writeBlock(model.closing);
 	}
