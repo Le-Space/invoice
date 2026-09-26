@@ -2,21 +2,22 @@
  * The payment code of an invoice in a crypto currency: what the GiroCode is
  * for an invoice in euros.
  *
- * Which code a currency gets, and which of the issuer's addresses it pays to:
+ * Which code an invoice gets depends on its currency and the network it is
+ * paid on (`networks.js`), and which of the issuer's addresses it pays to on
+ * its currency:
  *
- * | Currency | Code                              | Address   |
- * |----------|-----------------------------------|-----------|
- * | BTC      | BIP-21, with the amount           | `btc`     |
- * | ETH      | EIP-681 on Ethereum (1)           | `eth`     |
- * | POL      | EIP-681 on Polygon (137)          | `eth`     |
- * | USDC     | EIP-681 `transfer` on Ethereum    | `eth`     |
- * | NYM      | the address alone                 | `nym`     |
- * | AKT      | the address alone                 | `akt`     |
+ * | Currency | Network                        | Code                           | Address |
+ * |----------|--------------------------------|--------------------------------|---------|
+ * | BTC      | bitcoin                        | BIP-21, with the amount        | `btc`   |
+ * | ETH      | ethereum, base, arbitrum, optimism | EIP-681 on that chain id   | `eth`   |
+ * | POL      | polygon                        | EIP-681 on 137                 | `eth`   |
+ * | USDC     | ethereum, base, arbitrum, optimism, polygon | EIP-681 `transfer` on that chain's USDC contract | `eth` |
+ * | NYM      | nyx                            | the address alone              | `nym`   |
+ * | AKT      | akash                          | the address alone              | `akt`   |
  *
  * Cosmos chains have no payment URI that wallets agree on, so a NYM or AKT
  * invoice carries a code of the address, and the amount is typed in by hand —
- * the payment sentence names it. USDC is taken to be the one on Ethereum
- * mainnet; an invoice for USDC on another chain needs a template for it.
+ * the payment sentence names it.
  *
  * The amount is the invoice's due amount, scaled from the invoice's decimals
  * to the chain's (`toChainUnits`), so a code for 0,0015 ETH asks for exactly
@@ -27,22 +28,21 @@ import { bech32 } from '@scure/base';
 import { bitcoinAddress, bitcoinUri } from './bip21.js';
 import { toChainUnits } from './currency.js';
 import { checksumAddress, erc20Uri, ethereumUri } from './eip681.js';
-
-/** USDC on Ethereum mainnet (Circle's contract). */
-const USDC_ETHEREUM = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+import { defaultNetwork, networkOf, paysOn } from './networks.js';
 
 /**
- * @typedef {{ scheme: 'bip21' } | { scheme: 'eip681', chainId: number } | { scheme: 'erc20', chainId: number, token: string } | { scheme: 'address', prefix: string }} Scheme
+ * Which of the issuer's addresses a currency is paid to, and how it is
+ * checked: an EVM address is the same on every EVM chain.
+ *
+ * @type {Readonly<Record<string, { key: 'btc' | 'eth' | 'nym' | 'akt', kind: 'bitcoin' | 'evm' | 'cosmos', prefix?: string }>>}
  */
-
-/** @type {Readonly<Record<string, { address: 'btc' | 'eth' | 'nym' | 'akt', scheme: Scheme }>>} */
-export const PAYMENT_SCHEMES = Object.freeze({
-	BTC: { address: 'btc', scheme: { scheme: 'bip21' } },
-	ETH: { address: 'eth', scheme: { scheme: 'eip681', chainId: 1 } },
-	POL: { address: 'eth', scheme: { scheme: 'eip681', chainId: 137 } },
-	USDC: { address: 'eth', scheme: { scheme: 'erc20', chainId: 1, token: USDC_ETHEREUM } },
-	NYM: { address: 'nym', scheme: { scheme: 'address', prefix: 'n' } },
-	AKT: { address: 'akt', scheme: { scheme: 'address', prefix: 'akash' } }
+export const PAY_TO = Object.freeze({
+	BTC: { key: 'btc', kind: 'bitcoin' },
+	ETH: { key: 'eth', kind: 'evm' },
+	POL: { key: 'eth', kind: 'evm' },
+	USDC: { key: 'eth', kind: 'evm' },
+	NYM: { key: 'nym', kind: 'cosmos', prefix: 'n' },
+	AKT: { key: 'akt', kind: 'cosmos', prefix: 'akash' }
 });
 
 /**
@@ -73,12 +73,11 @@ export function cosmosAddress(address, prefix) {
  * @param {{ btc?: string, eth?: string, nym?: string, akt?: string } | undefined} crypto
  */
 export function payToAddress(currency, crypto) {
-	const entry = PAYMENT_SCHEMES[currency];
-	if (!entry) return null;
-	const raw = crypto?.[entry.address];
-	const { scheme } = entry;
-	if (scheme.scheme === 'bip21') return bitcoinAddress(String(raw ?? ''));
-	if (scheme.scheme === 'address') return cosmosAddress(raw, scheme.prefix);
+	if (!Object.hasOwn(PAY_TO, currency)) return null;
+	const entry = PAY_TO[currency];
+	const raw = crypto?.[entry.key];
+	if (entry.kind === 'bitcoin') return bitcoinAddress(String(raw ?? ''));
+	if (entry.kind === 'cosmos') return cosmosAddress(raw, /** @type {string} */ (entry.prefix));
 	return checksumAddress(String(raw ?? ''));
 }
 
@@ -89,6 +88,7 @@ export function payToAddress(currency, crypto) {
  *
  * @param {{
  *   currency: string,
+ *   network?: string | null,
  *   unit: { code: string, decimals: number },
  *   due: string,
  *   crypto: { btc?: string, eth?: string, nym?: string, akt?: string } | undefined,
@@ -97,23 +97,42 @@ export function payToAddress(currency, crypto) {
  * }} params
  * @returns {{ payload: string, address: string, withAmount: boolean } | null}
  */
-export function cryptoPaymentCode({ currency, unit, due, crypto, label = '', message = '' }) {
-	const entry = PAYMENT_SCHEMES[currency];
+export function cryptoPaymentCode({
+	currency,
+	network = defaultNetwork(currency),
+	unit,
+	due,
+	crypto,
+	label = '',
+	message = ''
+}) {
+	const net = networkOf(network);
 	const address = payToAddress(currency, crypto);
 	const amount = toChainUnits(due, unit);
-	if (!entry || !address || amount === null || BigInt(amount) <= 0n) return null;
+	if (!net || !paysOn(currency, net.id) || !address || amount === null || BigInt(amount) <= 0n) {
+		return null;
+	}
 
-	const { scheme } = entry;
+	const kind = PAY_TO[currency].kind;
 	/** @type {string | null} */
 	let payload = null;
-	if (scheme.scheme === 'bip21') {
+	if (kind === 'bitcoin') {
 		payload = bitcoinUri({ address, amountSats: amount, label, message });
-	} else if (scheme.scheme === 'eip681') {
-		payload = ethereumUri({ address, chainId: scheme.chainId, amountWei: amount });
-	} else if (scheme.scheme === 'erc20') {
-		payload = erc20Uri({ token: scheme.token, chainId: scheme.chainId, address, amount });
-	} else {
+	} else if (kind === 'cosmos') {
 		payload = address;
+	} else if (currency === 'USDC') {
+		payload = erc20Uri({
+			token: /** @type {string} */ (net.usdc),
+			chainId: /** @type {number} */ (net.chainId),
+			address,
+			amount
+		});
+	} else {
+		payload = ethereumUri({
+			address,
+			chainId: /** @type {number} */ (net.chainId),
+			amountWei: amount
+		});
 	}
-	return payload ? { payload, address, withAmount: scheme.scheme !== 'address' } : null;
+	return payload ? { payload, address, withAmount: kind !== 'cosmos', network: net.name } : null;
 }

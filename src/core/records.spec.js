@@ -248,6 +248,24 @@ describe('an invoice in another currency', () => {
 		).toEqual(['invoice.problem.payAddress']);
 	});
 
+	it('names the network it is paid on, one its currency is on', () => {
+		expect(nym().network).toBe('nyx');
+		expect(
+			codes(draftProblems(nym({ eurRate: RATE, network: 'base' }), { issuer: ISSUER }))
+		).toEqual(['invoice.problem.network']);
+		// USDC is on several chains; switching to it picks the first, Ethereum.
+		const usdc = setCurrency(nym(), 'USDC');
+		expect(usdc.network).toBe('ethereum');
+		expect(setCurrency({ ...usdc, network: 'base' }, 'USDC').network).toBe('base');
+		expect(setCurrency(usdc, 'EUR').network).toBeNull();
+	});
+
+	it('reads an invoice from before networks as paid on its currency’s first network', () => {
+		const { network, ...older } = nym({ currency: 'USDC', decimals: 6 });
+		expect(upgradeInvoice(older).network).toBe('ethereum');
+		expect(upgradeInvoice({ ...older, currency: 'EUR', decimals: 2 }).network).toBeNull();
+	});
+
 	it('refuses a currency it does not know', () => {
 		expect(codes(draftProblems(readyDraft({ currency: 'XYZ' }), { issuer: ISSUER }))).toEqual([
 			'invoice.problem.currency'
@@ -334,6 +352,7 @@ describe('an invoice in another currency', () => {
 		const storno = cancellationFor(invoice, { issueDate: '2026-09-25' });
 		expect(storno.currency).toBe('NYM');
 		expect(storno.decimals).toBe(6);
+		expect(storno.network).toBe('nyx');
 		expect(storno.eurRate).toEqual(RATE);
 		expect(storno.lines[0]).toMatchObject({ quantity: -3, unitPrice: '1500000' });
 	});

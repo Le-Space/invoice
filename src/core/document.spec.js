@@ -42,10 +42,10 @@ const LABELS = {
 	eth: 'Ethereum:',
 	nym: 'NYM:',
 	akt: 'Akash:',
-	payCaption: '{currency}-Zahlung',
+	payCaption: '{currency} auf {network}',
 	payHint: 'Eine Wallet, die den Code scannt, übernimmt Adresse und Betrag.',
 	payHintAddress: 'Der Code enthält die Adresse; den Betrag geben Sie bitte selbst ein.',
-	payAddress: 'Adresse: {address}',
+	payAddress: 'Adresse im Netzwerk {network}: {address}',
 	reference: 'Rechnung',
 	giroCaption: 'GiroCode',
 	giroHint:
@@ -309,6 +309,7 @@ describe('an invoice in another currency', () => {
 		issued({
 			currency: 'NYM',
 			decimals: 6,
+			network: 'nyx',
 			eurRate: RATE,
 			lines: [emptyLine({ description: 'Mixnode-Betrieb', quantity: 3, unitPrice: '1500000' })]
 		});
@@ -364,9 +365,11 @@ describe('an invoice in another currency', () => {
 	it('carries a code of the address instead, and writes the address out', () => {
 		expect(documentModel(nym(), LABELS).payCode).toEqual({
 			payload: ISSUER.crypto.nym,
-			caption: 'NYM-Zahlung',
+			caption: 'NYM auf Nyx',
 			hint: 'Der Code enthält die Adresse; den Betrag geben Sie bitte selbst ein.',
-			address: `Adresse: ${ISSUER.crypto.nym}`
+			address: `Adresse im Netzwerk Nyx: ${ISSUER.crypto.nym}`,
+			to: ISSUER.crypto.nym,
+			network: 'Nyx'
 		});
 	});
 
@@ -374,6 +377,7 @@ describe('an invoice in another currency', () => {
 		const btc = issued({
 			currency: 'BTC',
 			decimals: 8,
+			network: 'bitcoin',
 			eurRate: { ...RATE, eurPerUnit: '95000' },
 			lines: [emptyLine({ description: 'Beratung', quantity: 1, unitPrice: '100000' })]
 		});

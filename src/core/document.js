@@ -151,6 +151,38 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 	const registerEntry = [register.court, register.number].filter(Boolean).join(', ');
 	const reference = remittanceFor(invoice.number, labels);
 
+	/**
+	 * The code a wallet scans, for an invoice in a crypto currency: the
+	 * address, and for the currencies with a payment URI the amount too.
+	 * Absent on a Storno and where the issuer named no address.
+	 */
+	const payCode = (() => {
+		const code = cryptoPaymentCode({
+			currency,
+			network: invoice.network,
+			unit,
+			due: totals.due,
+			crypto,
+			label: issuer.name,
+			message: reference
+		});
+		if (!code) return null;
+		return {
+			payload: code.payload,
+			caption: labels.payCaption
+				.replaceAll('{currency}', currency)
+				.replaceAll('{network}', code.network),
+			hint: code.withAmount ? labels.payHint : labels.payHintAddress,
+			// The network is named with the address: sent on another chain,
+			// the payment does not arrive.
+			address: labels.payAddress
+				.replace('{address}', code.address)
+				.replace('{network}', code.network),
+			to: code.address,
+			network: code.network
+		};
+	})();
+
 	return {
 		/** A PNG data URL, drawn top left, or '' when nobody uploaded one. */
 		logo: String(issuer.logo ?? ''),
@@ -284,28 +316,8 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 			});
 			return payload ? { payload, caption: labels.giroCaption, hint: labels.giroHint } : null;
 		})(),
-		/**
-		 * The code a wallet scans, for an invoice in a crypto currency: the
-		 * address, and for the currencies with a payment URI the amount too.
-		 * Absent on a Storno and where the issuer named no address.
-		 */
-		payCode: (() => {
-			const code = cryptoPaymentCode({
-				currency,
-				unit,
-				due: totals.due,
-				crypto,
-				label: issuer.name,
-				message: reference
-			});
-			if (!code) return null;
-			return {
-				payload: code.payload,
-				caption: labels.payCaption.replaceAll('{currency}', currency),
-				hint: code.withAmount ? labels.payHint : labels.payHintAddress,
-				address: labels.payAddress.replace('{address}', code.address)
-			};
-		})(),
+		/** The code a wallet scans, for an invoice in a crypto currency. */
+		payCode,
 		/**
 		 * The three lines every page carries at its foot; a line nobody filled
 		 * in is left out rather than printed as a bare label.
@@ -351,7 +363,8 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 				[labels.deliveryDate, formatDay(invoice.deliveryDate, locale)],
 				...(due ? [[labels.dueDate, formatDay(due, locale)]] : [])
 			]),
-			totals: [{ label: labels.amountDue, value: money(totals.due), due: true }]
+			totals: [{ label: labels.amountDue, value: money(totals.due), due: true }],
+			payCode
 		})
 	};
 }

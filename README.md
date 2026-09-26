@@ -12,22 +12,24 @@ commit messages point to pull requests there.
 
 `src/core/` – pure modules, no network, no UI, each with its own spec:
 
-| Module                        | Does                                                                                            |
-| ----------------------------- | ----------------------------------------------------------------------------------------------- |
-| `records.js`                  | The invoice record, issuing (the act that freezes it), Storno, `foldCancellations`              |
-| `numbering.js`, `series.js`   | Number series per identity, e.g. `2026-00000-001`                                               |
-| `currency.js`                 | The currencies an invoice can be in: EUR, USD, CHF, GBP, BTC, ETH, USDC, NYM, AKT, POL          |
-| `money.js`                    | Integer smallest units as strings, rounding once, totals per VAT rate, VAT in euros             |
-| `customers.js`, `settings.js` | Customer directory and issuer settings                                                          |
-| `document.js`, `labels.js`    | The document model a PDF is drawn from, and the words it needs                                  |
-| `template.js`                 | Letter and closing from a Markdown template the reader owns                                     |
-| `pdf.js`                      | The PDF (pdf-lib, embedded DejaVu font)                                                         |
-| `girocode.js`                 | EPC069-12 GiroCode for a SEPA transfer                                                          |
-| `bip21.js`                    | BIP-21 URI for a Bitcoin payment, address checksum checked                                      |
-| `eip681.js`                   | EIP-681 URI for Ether or an ERC-20 token on any EVM chain, EIP-55 checksum                      |
-| `crypto-lines.js`             | Invoice lines from crypto transactions as Belege books them, with their source kept on the line |
-| `payment-code.js`             | The code a crypto invoice carries: BIP-21, EIP-681 (ETH, POL, USDC) or the address (NYM, AKT)   |
-| `duplicates.js`               | One number on two invoices is reported, not renumbered                                          |
+| Module                        | Does                                                                                                |
+| ----------------------------- | --------------------------------------------------------------------------------------------------- |
+| `records.js`                  | The invoice record, issuing (the act that freezes it), Storno, `foldCancellations`                  |
+| `numbering.js`, `series.js`   | Number series per identity, e.g. `2026-00000-001`                                                   |
+| `currency.js`                 | The currencies an invoice can be in: EUR, USD, CHF, GBP, BTC, ETH, USDC, NYM, AKT, POL              |
+| `money.js`                    | Integer smallest units as strings, rounding once, totals per VAT rate, VAT in euros                 |
+| `customers.js`, `settings.js` | Customer directory and issuer settings                                                              |
+| `document.js`, `labels.js`    | The document model a PDF is drawn from, and the words it needs                                      |
+| `template.js`                 | Letter and closing from a Markdown template the reader owns                                         |
+| `pdf.js`                      | The PDF (pdf-lib, embedded DejaVu font)                                                             |
+| `girocode.js`                 | EPC069-12 GiroCode for a SEPA transfer                                                              |
+| `bip21.js`                    | BIP-21 URI for a Bitcoin payment, address checksum checked                                          |
+| `eip681.js`                   | EIP-681 URI for Ether or an ERC-20 token on any EVM chain, EIP-55 checksum                          |
+| `crypto-lines.js`             | Invoice lines from crypto transactions as Belege books them, with their source kept on the line     |
+| `payment-code.js`             | The code a crypto invoice carries: BIP-21, EIP-681 (ETH, POL, USDC) or the address (NYM, AKT)       |
+| `networks.js`                 | The chains a crypto invoice is paid on, with Belege's chain ids and USDC contracts                  |
+| `chain-templates.js`          | Templates per chain: currency, network, usual lines and a letter (NYM, AKT, BTC, ETH, USDC on Base) |
+| `duplicates.js`               | One number on two invoices is reported, not renumbered                                              |
 
 `src/i18n/` – the German and English words of the printed invoice.
 
@@ -56,10 +58,15 @@ the amount in the chain's unit, and the address alone for NYM and AKT, where
 wallets agree on no payment URI. The address comes from the issuer's settings
 and is checked for its chain; an invoice without one cannot be issued.
 
-Next in milestone M5:
+A crypto invoice names the network it is paid on (`networks.js`): USDC and
+Ether exist on several chains, and a payment on the wrong one does not arrive.
+The code, the address line and the letter say it. Invoices from before networks
+are read as paid on the first network of their currency (Ethereum for ETH and
+USDC). `applyChainTemplate` sets a draft up for a chain — currency, decimals,
+network, the usual lines — and `chainTemplateText` gives the letter to issue
+it with, in German or English.
 
-1. Templates per chain (and USDC on other chains than Ethereum).
-2. The app: a PWA with its own peer-to-peer store.
+Next in milestone M5: the app, a PWA with its own peer-to-peer store.
 
 Later: e-invoices (EN 16931, ZUGFeRD/XRechnung), and the invoice extension of
 [UCEP](https://github.com/Le-Space/ucep-spec) so that

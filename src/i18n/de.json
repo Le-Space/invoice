@@ -89,7 +89,8 @@
 			"eurRateMonth": "Der Kurs muss aus dem Monat der Leistung stammen (§ 16 Abs. 6 UStG).",
 			"cryptoTransaction": "Diese Buchung ist keine Krypto-Transaktion mit Menge und Kurs.",
 			"cryptoCurrency": "Aus dieser Transaktion lässt sich nur eine Rechnung in Euro oder in ihrem eigenen Asset machen.",
-			"payAddress": "Für eine Rechnung in dieser Währung fehlt in den Einstellungen eine gültige Adresse, an die gezahlt wird."
+			"payAddress": "Für eine Rechnung in dieser Währung fehlt in den Einstellungen eine gültige Adresse, an die gezahlt wird.",
+			"network": "Diese Währung wird in diesem Netzwerk nicht gezahlt."
 		},
 		"note": {
 			"kleinunternehmer": "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.",
@@ -178,10 +179,10 @@
 			"reference": "Rechnung",
 			"giroCaption": "GiroCode",
 			"giroHint": "Mit dem GiroCode übernimmt Ihre Banking-App Empfänger, IBAN, Betrag und Verwendungszweck.",
-			"payCaption": "{currency}-Zahlung",
+			"payCaption": "{currency} auf {network}",
 			"payHint": "Eine Wallet, die den Code scannt, übernimmt Adresse und Betrag.",
 			"payHintAddress": "Der Code enthält die Adresse; den Betrag geben Sie bitte selbst ein.",
-			"payAddress": "Adresse: {address}",
+			"payAddress": "Adresse im Netzwerk {network}: {address}",
 			"paymentTerms": "Bitte überweisen Sie {amount} bis zum {date} auf das unten genannte Konto und geben Sie die Rechnungsnummer {number} als Verwendungszweck an.",
 			"paymentTermsCrypto": "Bitte zahlen Sie {amount} bis zum {date} an die angegebene Adresse; die Rechnungsnummer {number} hilft uns bei Rückfragen.",
 			"paymentOnReceipt": "Zahlbar sofort nach Erhalt.",
