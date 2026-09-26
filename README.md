@@ -84,8 +84,16 @@ and is published here under MIT.
 - Settings: the issuer, the bank, the crypto addresses (checked for their
   network), the default tax mode and payment terms.
 
-Not yet: sync between one's own devices and the UCEP invoice extension that
-lets Belege ask for a receipt (milestone M8).
+- Connections: the app serves the UCEP `invoice` extension
+  ([Le-Space/ucep-spec](https://github.com/Le-Space/ucep-spec)) through a
+  relay (`VITE_RELAY_ADDRS`, by default the Le-Space relay simple-todo uses).
+  An app paired by invitation (link or QR code) or by a six-digit code asks
+  for an Eigenbeleg (`create-eigenbeleg`), its state (`status`) and its PDF
+  (`get-pdf`); a stranger gets `help` and nothing else. The peer id is derived
+  from the passkey, the grants are kept sealed.
+
+Not yet: sync between one's own devices, `create-draft`, and fetching a PDF by
+CID over Bitswap on a relayed connection.
 
 Later: e-invoices (EN 16931, ZUGFeRD/XRechnung), and the invoice extension of
 [UCEP](https://github.com/Le-Space/ucep-spec) so that

@@ -28,7 +28,7 @@ import {
 import * as dagCbor from '@ipld/dag-cbor';
 
 import { createEphemeralPeerKey, createOfflineLibp2p } from './network.js';
-import { deriveDatabaseKey } from './database-keys.js';
+import { deriveDatabaseKey, derivePeerKeySeed } from './database-keys.js';
 import { readPrfOutput } from './passkey-identity.js';
 import { createSessionIdentities } from './session-identities.js';
 import { openStore } from './store/repository.js';
@@ -49,6 +49,7 @@ export const STORAGE_PATHS = Object.freeze({
  * @property {Awaited<ReturnType<typeof openStore>>} store
  * @property {string} identityHash the identity document's hash
  * @property {string} peerId this session's libp2p peer id
+ * @property {Uint8Array} ucepSeed the seed of the UCEP node's peer key, derived from the passkey
  * @property {() => Promise<void>} stop
  * @property {{ signingKey: Uint8Array, databaseKey: Uint8Array, peerKey: Uint8Array }} [secretsForE2E]
  *   only in E2E builds
@@ -72,6 +73,8 @@ export async function startSession(credential) {
 	// without a key nothing is read or written. No plaintext fallback.
 	const prfOutput = await readPrfOutput(credential);
 	const encryptionKey = await deriveDatabaseKey(prfOutput);
+	// The UCEP node's key (ucep/net.js): the same peer id on every unlock.
+	const ucepSeed = await derivePeerKeySeed(prfOutput);
 
 	const blockstore = new LevelBlockstore(STORAGE_PATHS.blockstore);
 	const datastore = new LevelDatastore(STORAGE_PATHS.datastore);
@@ -120,6 +123,7 @@ export async function startSession(credential) {
 			identityHash: identity.hash,
 			peerId: libp2p.peerId.toString(),
 			store,
+			ucepSeed,
 			// Only in E2E builds, so the test can look for these bytes on disk.
 			// Written inline so every other build drops it, not just skips it.
 			...(import.meta.env.VITE_E2E === 'true'

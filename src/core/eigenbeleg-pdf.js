@@ -114,6 +114,11 @@ export async function eigenbelegPdfBytes(record, labels, { locale = 'de-DE' } = 
 	const pdf = await PDFDocument.create();
 	pdf.setTitle(`${labels.title} ${record.number}`);
 	pdf.setProducer('Le-Space invoice');
+	// The document's own moment, not the clock's: the same Eigenbeleg is the
+	// same bytes every time it is drawn, so its SHA-256 and CID (get-pdf) hold.
+	const made = new Date(record.createdAt);
+	pdf.setCreationDate(made);
+	pdf.setModificationDate(made);
 	const { regular, bold, embedded } = await embedFonts(pdf, StandardFonts);
 	const ink = rgb(0.09, 0.09, 0.11);
 	const faint = rgb(0.45, 0.45, 0.48);

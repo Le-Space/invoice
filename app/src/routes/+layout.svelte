@@ -21,6 +21,11 @@
 			match: (/** @type {string} */ p) => p === '/' || p.startsWith('/rechnung')
 		},
 		{
+			href: '/verbindungen',
+			key: 'app.nav.connections',
+			match: (/** @type {string} */ p) => p.startsWith('/verbindungen')
+		},
+		{
 			href: '/einstellungen',
 			key: 'app.nav.settings',
 			match: (/** @type {string} */ p) => p.startsWith('/einstellungen')

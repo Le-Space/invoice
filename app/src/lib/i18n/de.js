@@ -5,8 +5,57 @@ export default {
 	app: {
 		name: 'Rechnungen',
 		tagline: 'Rechnungen in Euro und Krypto, verschlüsselt auf deinem Gerät',
-		nav: { invoices: 'Rechnungen', settings: 'Einstellungen' },
+		nav: { invoices: 'Rechnungen', connections: 'Verbindungen', settings: 'Einstellungen' },
 		lock: 'Sperren'
+	},
+	ucep: {
+		manifest: {
+			name: 'Rechnungen',
+			description: 'Erstellt Eigenbelege und Rechnungsentwürfe für gekoppelte Apps.'
+		},
+		scopes: {
+			eigenbeleg: 'Eigenbelege in deinem Namen erstellen.',
+			read: 'Dokumente lesen, die diese App angefordert hat, samt PDF.'
+		},
+		pairing: {
+			heading: 'Verbindungen',
+			intro:
+				'Andere Apps – zum Beispiel Belege – können diese App bitten, Eigenbelege zu erstellen. Dafür werden sie einmal gekoppelt: per Einladung oder mit einem sechsstelligen Code. Die Verbindung läuft über ein Relay und ist Ende zu Ende verschlüsselt; deine Rechnungen bleiben auf diesem Gerät.',
+			thisApp: 'Diese App',
+			online: 'Erreichbar',
+			offline: 'Nicht erreichbar',
+			peerId: 'Peer-ID',
+			copy: 'Kopieren',
+			copied: 'Kopiert',
+			starting: 'Verbindung wird aufgebaut …',
+			failed: 'Die Verbindung konnte nicht aufgebaut werden:',
+			invitationHeading: 'Einladung',
+			invitationHint:
+				'Zeig den QR-Code oder gib den Link weiter. Wer ihn hat, kann sich einmal koppeln – mit den Rechten, die du hier anbietest. Er gilt zehn Minuten.',
+			invite: 'Einladung erstellen',
+			qr: 'QR-Code der Einladung',
+			expires: 'Gültig bis {when}',
+			inBandHeading: 'Kopplung per Code',
+			inBandHint:
+				'Erlaube für zwei Minuten, dass eine App um eine Kopplung bittet. Sie zeigt dann sechs Ziffern; tipp sie hier ein, wenn es dieselben sind.',
+			openWindow: 'Kopplung für 2 Minuten erlauben',
+			windowOpen: 'Kopplung ist erlaubt …',
+			unnamed: 'Ohne Namen',
+			typeCode: 'Code, den die andere App zeigt',
+			approve: 'Zustimmen',
+			deny: 'Ablehnen',
+			codeWrong: 'Der Code stimmt nicht mit dem der anderen App überein.',
+			grantsHeading: 'Gekoppelte Apps',
+			noGrants: 'Noch keine App gekoppelt.',
+			since: 'seit {when}',
+			unpair: 'Entkoppeln'
+		},
+		commands: {
+			help: 'Was diese Erweiterung kann.',
+			createEigenbeleg: 'Einen Eigenbeleg für eine Zahlung ohne Beleg der Gegenseite erstellen.',
+			status: 'Den Stand eines Dokuments abfragen.',
+			getPdf: 'Das PDF eines Dokuments holen.'
+		}
 	},
 	onboarding: {
 		title: 'Deine Rechnungen aufschließen',
@@ -35,6 +84,7 @@ export default {
 				fromTemplate: 'Vorlage',
 				noTemplate: 'Ohne Vorlage (Euro)',
 				draft: 'Entwurf',
+				eigenbeleg: 'Eigenbeleg',
 				issued: 'Ausgestellt',
 				cancelled: 'Storniert',
 				customer: 'Kunde',

@@ -6,7 +6,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { newKey, sealer } from './db-encryption.js';
-import { DB_KEY_INFO, deriveDatabaseKey, deriveDatabaseName } from './database-keys.js';
+import {
+	DB_KEY_INFO,
+	deriveDatabaseKey,
+	deriveDatabaseName,
+	derivePeerKeySeed
+} from './database-keys.js';
 
 const prf = () => crypto.getRandomValues(new Uint8Array(32));
 const hex = (/** @type {Uint8Array} */ b) => Buffer.from(b).toString('hex');
@@ -51,6 +56,14 @@ describe('database-keys', () => {
 
 		expect(new TextDecoder().decode(await (await sealer(key)).open(sealed))).toBe('Miete');
 		await expect((await sealer(newKey())).open(sealed)).rejects.toThrow();
+	});
+
+	it('derives the UCEP peer key seed under its own info string, stably', async () => {
+		// Node: crypto.hkdfSync(sha256, 32 × 0x07, empty salt, "invoice/peer-key/v1", 32).
+		const output = new Uint8Array(32).fill(7);
+		const seed = hex(await derivePeerKeySeed(output));
+		expect(seed).toBe('6c15aaef6b96983df33096986aef3a41e1770f331f7d77fb3bdf7b03b9c91099');
+		expect(seed).not.toBe(hex(await deriveDatabaseKey(output)));
 	});
 
 	it('refuses something that is not a PRF output', async () => {
