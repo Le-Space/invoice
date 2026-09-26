@@ -96,7 +96,7 @@ describe('between the directory and the invoice', () => {
 			{
 				...emptyDraft(),
 				customer: invoiceCustomerFrom(directory[0]),
-				lines: [emptyLine({ description: 'Beratung', quantity: 1, unitPriceCents: 10_000 })]
+				lines: [emptyLine({ description: 'Beratung', quantity: 1, unitPrice: '10000' })]
 			},
 			{
 				number: '2026-1-001',

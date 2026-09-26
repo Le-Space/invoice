@@ -21,7 +21,11 @@ const LABELS = {
 	vatOf: 'USt. {rate} % von {base}',
 	totalCurrency: 'Gesamt EUR',
 	amountDue: 'Zu zahlender Betrag EUR',
-	netNote: 'Einzelpreise und Beträge netto in EUR.',
+	vatInEuro: 'USt. in EUR',
+	rateNote: 'Umrechnung der USt.: 1 {currency} = {rate} € ({source}, {date}).',
+	paymentTermsCrypto:
+		'Bitte zahlen Sie {amount} bis zum {date} an die unten genannte Adresse; die Rechnungsnummer {number} hilft uns bei Rückfragen.',
+	netNote: 'Einzelpreise und Beträge netto in {currency}.',
 	vatId: 'USt.-IdNr.:',
 	taxNumber: 'Steuernr.:',
 	register: 'Handelsregister:',
@@ -55,7 +59,7 @@ const ISSUER = {
 	email: 'buchhaltung@example.org',
 	phone: '+49 000 000',
 	web: 'https://example.org',
-	bank: { name: 'Testbank', iban: 'DE89370400440532013000', bic: 'TESTDEFFXXX' },
+	bank: { name: 'Testbank', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' },
 	crypto: { btc: 'bc1qexample', eth: '' },
 	register: {
 		court: 'Amtsgericht Musterstadt',
@@ -73,9 +77,7 @@ function issued(/** @type {any} */ changes = {}) {
 			address: 'Beispielweg 2\n54321 Beispielstadt am See',
 			vatId: ''
 		},
-		lines: [
-			emptyLine({ description: 'Tagessatz', quantity: 2, unit: 'Tage', unitPriceCents: 50_000 })
-		],
+		lines: [emptyLine({ description: 'Tagessatz', quantity: 2, unit: 'Tage', unitPrice: '50000' })],
 		paymentTermsDays: 14,
 		...changes
 	};
@@ -162,7 +164,7 @@ describe('the invoice itself', () => {
 						details: ['LWMA und DigiShield erklärt', '  ', 'Mainnet-Node synchronisiert'],
 						quantity: 1,
 						unit: 'Tag',
-						unitPriceCents: 50_000
+						unitPrice: '50000'
 					})
 				]
 			}),
@@ -248,7 +250,7 @@ describe('the GiroCode', () => {
 
 	it('is absent on a Storno, which owes money the other way', () => {
 		const storno = issued({
-			lines: [emptyLine({ description: 'Tagessatz', quantity: -2, unitPriceCents: 50_000 })]
+			lines: [emptyLine({ description: 'Tagessatz', quantity: -2, unitPrice: '50000' })]
 		});
 		expect(documentModel(storno, LABELS).giro).toBeNull();
 	});
@@ -282,5 +284,64 @@ describe('the footer', () => {
 		const { footer } = documentModel(bare, LABELS);
 		expect(footer).toHaveLength(2);
 		expect(footer.flat().every((cell) => cell.value !== '')).toBe(true);
+	});
+});
+
+describe('an invoice in another currency', () => {
+	const RATE = { eurPerUnit: '0.0612', source: 'Kraken', date: '2026-09-24' };
+	const nym = () =>
+		issued({
+			currency: 'NYM',
+			decimals: 6,
+			eurRate: RATE,
+			lines: [emptyLine({ description: 'Mixnode-Betrieb', quantity: 3, unitPrice: '1500000' })]
+		});
+
+	it('writes every figure in that currency', () => {
+		const model = documentModel(nym(), LABELS);
+		expect(model.rows[0]).toMatchObject({ quantity: '3', unitPrice: '1,50', net: '4,50' });
+		expect(model.netNote).toBe('Einzelpreise und Beträge netto in NYM.');
+		expect(model.payment).toContain('5,355\u00A0NYM');
+	});
+
+	it('states the VAT in euros too, with the rate, its source and its day', () => {
+		const rows = documentModel(nym(), LABELS).totals;
+		expect(rows.map((row) => [row.label, row.value])).toEqual([
+			['Zwischensumme ohne USt.', '4,50\u00A0NYM'],
+			['USt. 19 % von 4,50\u00A0NYM', '0,855\u00A0NYM'],
+			['Gesamt EUR', '5,355\u00A0NYM'],
+			['Zu zahlender Betrag EUR', '5,355\u00A0NYM'],
+			['USt. in EUR', '0,05\u00A0€']
+		]);
+		expect(documentModel(nym(), LABELS).rateNote).toBe(
+			'Umrechnung der USt.: 1 NYM = 0,0612 € (Kraken, 24.09.2026).'
+		);
+	});
+
+	it('asks for a payment to the address, not to the bank account', () => {
+		const { payment } = documentModel(nym(), LABELS);
+		expect(payment).toContain('an die unten genannte Adresse');
+		expect(payment).not.toContain('überweisen');
+	});
+
+	it('groups a large rate, and leaves its decimals as they were given', () => {
+		const model = documentModel(
+			{ ...nym(), currency: 'BTC', eurRate: { ...RATE, eurPerUnit: '95000.125' } },
+			LABELS
+		);
+		expect(model.rateNote).toContain('1 BTC = 95.000,125 €');
+	});
+
+	it('says nothing about euros where there is no VAT to state', () => {
+		const model = documentModel(issued({ currency: 'USD', taxMode: 'kleinunternehmer' }), LABELS);
+		expect(model.totals.some((row) => row.label === 'USt. in EUR')).toBe(false);
+		expect(model.rateNote).toBe('');
+		// A dollar invoice is still paid by transfer.
+		expect(model.payment).toContain('überweisen');
+		expect(model.totals.at(-1)?.value).toBe('1.000,00\u00A0USD');
+	});
+
+	it('carries no GiroCode, which is for euros only', () => {
+		expect(documentModel(nym(), LABELS).giro).toBeNull();
 	});
 });

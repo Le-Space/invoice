@@ -83,7 +83,10 @@
 			"patternCounter": "The pattern needs exactly one counter, for example {NNN}.",
 			"patternToken": "Only {YYYY}, {YY}, {MM} and {N…} are allowed as placeholders.",
 			"patternYear": "A circle that restarts every year needs the year in the number — otherwise it hands out the same one twice.",
-			"patternMonth": "A circle that restarts every month needs the year and the month in the number."
+			"patternMonth": "A circle that restarts every month needs the year and the month in the number.",
+			"currency": "The invoice does not know this currency.",
+			"eurRate": "An invoice in another currency than euros states its VAT in euros too: the rate, its source and its date are missing.",
+			"eurRateMonth": "The rate has to be one of the month the service was rendered in (§16(6) UStG)."
 		},
 		"note": {
 			"kleinunternehmer": "No VAT is charged, under §19 UStG.",
@@ -150,7 +153,9 @@
 			"vatOf": "VAT {rate} % of {base}",
 			"totalCurrency": "Total",
 			"amountDue": "Amount due",
-			"netNote": "Unit prices and amounts are net, in EUR.",
+			"vatInEuro": "VAT in EUR",
+			"rateNote": "VAT converted at 1 {currency} = €{rate} ({source}, {date}).",
+			"netNote": "Unit prices and amounts are net, in {currency}.",
 			"vatId": "VAT id:",
 			"taxNumber": "Tax number:",
 			"register": "Commercial register:",
@@ -169,6 +174,7 @@
 			"giroCaption": "GiroCode",
 			"giroHint": "A banking app that scans the GiroCode fills in recipient, IBAN, amount and reference by itself.",
 			"paymentTerms": "Please transfer {amount} by {date} to the account below, quoting invoice number {number} as the reference.",
+			"paymentTermsCrypto": "Please pay {amount} by {date} to the address below; invoice number {number} helps with any question.",
 			"paymentOnReceipt": "Payable on receipt.",
 			"page": "Page {page} of {pages}",
 			"customerNumber": "Customer no."
@@ -219,6 +225,9 @@
 		},
 		"needsListHeading": "Invoices need a list of your own",
 		"needsListAction": "Go to the lists",
-		"needsListHint": "Under “Lists” → “{action}”. The invoices then live in the same list as that list’s todos."
+		"needsListHint": "Under “Lists” → “{action}”. The invoices then live in the same list as that list’s todos.",
+		"warning": {
+			"decimals": "This draft was written with other decimals than its currency has now. Its prices mean what they meant when written – please check before issuing."
+		}
 	}
 }

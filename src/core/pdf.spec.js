@@ -20,7 +20,7 @@ const ISSUER = {
 	email: 'buchhaltung@example.org',
 	phone: '+49 000 0000',
 	web: 'https://example.org',
-	bank: { name: 'Testbank', iban: 'DE89370400440532013000', bic: 'TESTDEFFXXX' },
+	bank: { name: 'Testbank', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' },
 	crypto: { btc: 'bc1qexample', eth: '' },
 	register: {
 		court: 'Amtsgericht Musterstadt',
@@ -39,13 +39,13 @@ const invoice = issue(
 				description: 'Tagessatz — Beratung',
 				quantity: 2,
 				unit: 'Tage',
-				unitPriceCents: 50_000
+				unitPrice: '50000'
 			}),
 			emptyLine({
 				description: 'Fahrtkosten',
 				quantity: 1,
 				unit: 'Pauschale',
-				unitPriceCents: 4500
+				unitPrice: '4500'
 			})
 		],
 		notes: 'Vielen Dank für die Zusammenarbeit.'
@@ -119,6 +119,26 @@ describe('invoicePdfBytes', () => {
 			LABELS
 		);
 		expect(bytes.byteLength).toBeGreaterThan(1000);
+	});
+
+	it('prints an invoice in NYM, and one in Ether with all eighteen decimals', async () => {
+		const rate = { eurPerUnit: '0.0612', source: 'Kraken', date: '2026-09-24' };
+		for (const [currency, unitPrice] of [
+			['NYM', '1500000'],
+			['ETH', '123456789']
+		]) {
+			const draft = {
+				...emptyDraft({ currency, issueDate: '2026-09-24' }),
+				eurRate: rate,
+				customer: invoice.customer,
+				lines: [emptyLine({ description: 'Mixnode-Betrieb', quantity: 3, unitPrice })]
+			};
+			const bytes = await invoicePdfBytes(
+				issue(draft, { number: '2026-48213-002', issuer: ISSUER, issuedBy: 'did' }),
+				LABELS
+			);
+			expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe('%PDF-');
+		}
 	});
 
 	it('names the file after the invoice', () => {

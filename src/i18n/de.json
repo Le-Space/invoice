@@ -83,7 +83,10 @@
 			"patternCounter": "Das Muster braucht genau einen Zähler, zum Beispiel {NNN}.",
 			"patternToken": "Erlaubt sind nur {YYYY}, {YY}, {MM} und {N…} als Platzhalter.",
 			"patternYear": "Ein Kreis, der jedes Jahr neu beginnt, braucht das Jahr in der Nummer — sonst entstehen doppelte Nummern.",
-			"patternMonth": "Ein Kreis, der jeden Monat neu beginnt, braucht Jahr und Monat in der Nummer."
+			"patternMonth": "Ein Kreis, der jeden Monat neu beginnt, braucht Jahr und Monat in der Nummer.",
+			"currency": "Diese Währung kennt die Rechnung nicht.",
+			"eurRate": "Eine Rechnung in einer anderen Währung als Euro gibt die USt. auch in Euro an: Kurs, Quelle und Datum fehlen.",
+			"eurRateMonth": "Der Kurs muss aus dem Monat der Leistung stammen (§ 16 Abs. 6 UStG)."
 		},
 		"note": {
 			"kleinunternehmer": "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.",
@@ -150,7 +153,9 @@
 			"vatOf": "USt. {rate} % von {base}",
 			"totalCurrency": "Gesamt",
 			"amountDue": "Zu zahlender Betrag",
-			"netNote": "Einzelpreise und Beträge netto in EUR.",
+			"vatInEuro": "USt. in EUR",
+			"rateNote": "Umrechnung der USt.: 1 {currency} = {rate} € ({source}, {date}).",
+			"netNote": "Einzelpreise und Beträge netto in {currency}.",
 			"vatId": "USt.-IdNr.:",
 			"taxNumber": "Steuernr.:",
 			"register": "Handelsregister:",
@@ -169,6 +174,7 @@
 			"giroCaption": "GiroCode",
 			"giroHint": "Mit dem GiroCode übernimmt Ihre Banking-App Empfänger, IBAN, Betrag und Verwendungszweck.",
 			"paymentTerms": "Bitte überweisen Sie {amount} bis zum {date} auf das unten genannte Konto und geben Sie die Rechnungsnummer {number} als Verwendungszweck an.",
+			"paymentTermsCrypto": "Bitte zahlen Sie {amount} bis zum {date} an die unten genannte Adresse; die Rechnungsnummer {number} hilft uns bei Rückfragen.",
 			"paymentOnReceipt": "Zahlbar sofort nach Erhalt.",
 			"page": "Seite {page} von {pages}",
 			"customerNumber": "Kundennr."
@@ -219,6 +225,9 @@
 		},
 		"needsListHeading": "Rechnungen brauchen eine eigene Liste",
 		"needsListAction": "Zu den Listen",
-		"needsListHint": "Unter „Listen“ → „{action}“. Die Rechnungen liegen dann in derselben Liste wie deren Aufgaben."
+		"needsListHint": "Unter „Listen“ → „{action}“. Die Rechnungen liegen dann in derselben Liste wie deren Aufgaben.",
+		"warning": {
+			"decimals": "Dieser Entwurf wurde mit anderen Nachkommastellen geschrieben, als die Währung heute hat. Die Preise gelten so, wie sie geschrieben wurden – bitte vor dem Ausstellen prüfen."
+		}
 	}
 }
