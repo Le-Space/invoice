@@ -1,0 +1,29 @@
+{
+	"name": "@le-space/invoice",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Invoices that live in your own peer-to-peer store: records, numbering, templates, PDF and payment codes.",
+	"license": "MIT",
+	"type": "module",
+	"exports": {
+		"./*": "./src/core/*.js"
+	},
+	"engines": {
+		"node": ">=22"
+	},
+	"scripts": {
+		"test": "vitest --run",
+		"lint": "prettier --check .",
+		"format": "prettier --write ."
+	},
+	"dependencies": {
+		"@pdf-lib/fontkit": "1.1.1",
+		"pdf-lib": "1.17.1",
+		"uqr": "0.1.3"
+	},
+	"devDependencies": {
+		"prettier": "^3.4.2",
+		"vitest": "^3.2.3"
+	},
+	"packageManager": "pnpm@10.33.0"
+}

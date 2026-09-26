@@ -57,14 +57,22 @@ const ISSUER = {
 	web: 'https://example.org',
 	bank: { name: 'Testbank', iban: 'DE89370400440532013000', bic: 'TESTDEFFXXX' },
 	crypto: { btc: 'bc1qexample', eth: '' },
-	register: { court: 'Amtsgericht Musterstadt', number: 'HRB 00000', managingDirector: 'Erika Mustermann' },
+	register: {
+		court: 'Amtsgericht Musterstadt',
+		number: 'HRB 00000',
+		managingDirector: 'Erika Mustermann'
+	},
 	logo: ''
 };
 
 function issued(/** @type {any} */ changes = {}) {
 	const draft = {
 		...emptyDraft({ issueDate: '2026-09-24' }),
-		customer: { name: 'Stromwerk Test AG', address: 'Beispielweg 2\n54321 Beispielstadt am See', vatId: '' },
+		customer: {
+			name: 'Stromwerk Test AG',
+			address: 'Beispielweg 2\n54321 Beispielstadt am See',
+			vatId: ''
+		},
 		lines: [
 			emptyLine({ description: 'Tagessatz', quantity: 2, unit: 'Tage', unitPriceCents: 50_000 })
 		],

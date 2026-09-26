@@ -22,7 +22,11 @@ const ISSUER = {
 	web: 'https://example.org',
 	bank: { name: 'Testbank', iban: 'DE89370400440532013000', bic: 'TESTDEFFXXX' },
 	crypto: { btc: 'bc1qexample', eth: '' },
-	register: { court: 'Amtsgericht Musterstadt', number: 'HRB 00000', managingDirector: 'Erika Mustermann' },
+	register: {
+		court: 'Amtsgericht Musterstadt',
+		number: 'HRB 00000',
+		managingDirector: 'Erika Mustermann'
+	},
 	logo: ''
 };
 

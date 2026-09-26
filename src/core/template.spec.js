@@ -71,8 +71,16 @@ describe('templateContext', () => {
 			totals: [{ label: 'Zu zahlender Betrag EUR', value: '1.190,00', due: true }]
 		};
 		const invoice = {
-			customer: { name: 'Stromwerk Test AG', address: 'Beispielweg 2\n54321 Beispielstadt', vatId: '' },
-			issuer: { name: 'Wolkenfabrik UG', register: { managingDirector: 'Erika Mustermann' }, bank: {} }
+			customer: {
+				name: 'Stromwerk Test AG',
+				address: 'Beispielweg 2\n54321 Beispielstadt',
+				vatId: ''
+			},
+			issuer: {
+				name: 'Wolkenfabrik UG',
+				register: { managingDirector: 'Erika Mustermann' },
+				bank: {}
+			}
 		};
 		const context = templateContext(model, invoice);
 		expect(context.nummer).toBe('2026-48213-001');

@@ -11,8 +11,10 @@ describe('the document’s labels', () => {
 	it('are all in both catalogues', () => {
 		for (const catalogue of [de, en]) {
 			const translate = lookup(catalogue);
-			const missing = [...DOCUMENT_LABEL_KEYS.map((k) => `invoice.document.${k}`), ...NOTE_KEYS]
-				.filter((key) => translate(key) === '');
+			const missing = [
+				...DOCUMENT_LABEL_KEYS.map((k) => `invoice.document.${k}`),
+				...NOTE_KEYS
+			].filter((key) => translate(key) === '');
 			expect(missing).toEqual([]);
 		}
 	});

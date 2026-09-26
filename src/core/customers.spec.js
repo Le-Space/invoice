@@ -13,7 +13,12 @@ import {
 import { emptyDraft, emptyLine, issue } from './records.js';
 
 const directory = [
-	emptyCustomer({ id: 'c1', name: 'Stromwerk Test AG', address: 'Probehausen', vatId: 'DE123456789' }),
+	emptyCustomer({
+		id: 'c1',
+		name: 'Stromwerk Test AG',
+		address: 'Probehausen',
+		vatId: 'DE123456789'
+	}),
 	emptyCustomer({ id: 'c2', name: 'Acme GmbH', address: 'Berlin', vatId: '' }),
 	emptyCustomer({ id: 'c3', name: 'Alt & Weg KG', address: 'Nirgendwo', deletedAt: '2026-01-01' })
 ];
