@@ -16,6 +16,13 @@
 	import { formatDay } from '@le-space/invoice/document';
 	import { documentLabels } from '@le-space/invoice/labels';
 	import { invoiceFileName, invoicePdfBytes } from '@le-space/invoice/pdf';
+	import { isEigenbeleg } from '@le-space/invoice/eigenbeleg';
+	import {
+		eigenbelegFileName,
+		eigenbelegLabels,
+		eigenbelegPdfBytes,
+		eigenbelegRows
+	} from '@le-space/invoice/eigenbeleg-pdf';
 	import { t } from '$lib/i18n/index.js';
 	import { app, currentStore } from '$lib/session.svelte.js';
 	import { draftCancellation, issueDraft, saveDraft } from '$lib/invoices.js';
@@ -47,7 +54,8 @@
 	});
 
 	let unit = $derived(draft ? moneyUnit(draft) : { code: 'EUR', decimals: 2 });
-	let issued = $derived(stored?.state === 'issued');
+	let eigenbeleg = $derived(isEigenbeleg(stored));
+	let issued = $derived(stored?.state === 'issued' || eigenbeleg);
 	let problems = $derived(
 		draft && !issued ? draftProblems(draft, { issuer: app.settings?.issuer }) : []
 	);
@@ -142,14 +150,22 @@
 	async function downloadPdf() {
 		busy = true;
 		try {
-			const labels = documentLabels((key) => t(key));
-			const bytes = await invoicePdfBytes(upgradeInvoice($state.snapshot(stored)), labels);
+			const record = $state.snapshot(stored);
+			const bytes = eigenbeleg
+				? await eigenbelegPdfBytes(
+						record,
+						eigenbelegLabels((key) => t(key))
+					)
+				: await invoicePdfBytes(
+						upgradeInvoice(record),
+						documentLabels((key) => t(key))
+					);
 			const url = URL.createObjectURL(
 				new Blob([/** @type {BlobPart} */ (bytes)], { type: 'application/pdf' })
 			);
 			const a = document.createElement('a');
 			a.href = url;
-			a.download = invoiceFileName(stored);
+			a.download = eigenbeleg ? eigenbelegFileName(stored) : invoiceFileName(stored);
 			a.click();
 			setTimeout(() => URL.revokeObjectURL(url), 1000);
 		} finally {
@@ -176,6 +192,28 @@
 
 {#if !draft}
 	<p class="mt-4 text-sm text-faint">…</p>
+{:else if eigenbeleg}
+	<section class="mt-4 space-y-4" data-testid="eigenbeleg">
+		<h1 class="text-lg font-semibold text-heading">
+			{t('invoice.eigenbeleg.doc.title')}
+			{stored.number}
+		</h1>
+		<dl
+			class="grid gap-2 rounded-lg border border-border bg-surface p-4 text-sm sm:grid-cols-[12rem_1fr]"
+		>
+			{#each eigenbelegRows( stored, eigenbelegLabels((key) => t(key)) ) as [label, value] (label)}
+				<dt class="text-xs text-faint">{label}</dt>
+				<dd class="break-all">{value}</dd>
+			{/each}
+		</dl>
+		<button
+			type="button"
+			class={primary}
+			disabled={busy}
+			onclick={downloadPdf}
+			data-testid="download-pdf">{t('invoice.app.editor.pdf')}</button
+		>
+	</section>
 {:else if issued}
 	<section class="mt-4 space-y-4" data-testid="issued-invoice">
 		<h1 class="text-lg font-semibold text-heading">

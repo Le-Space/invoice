@@ -164,6 +164,14 @@ describe('the Eigenbeleg as a PDF', () => {
 		expect(rows).not.toContain('Referenz');
 	});
 
+	it('is the same bytes every time it is drawn, so its hash holds', async () => {
+		const record = createEigenbeleg(args, act);
+		const first = await eigenbelegPdfBytes(record, labels);
+		await new Promise((resolve) => setTimeout(resolve, 1100));
+		const second = await eigenbelegPdfBytes(record, labels);
+		expect(Buffer.from(second).equals(Buffer.from(first))).toBe(true);
+	});
+
 	it('is a PDF, named after its number', async () => {
 		const record = createEigenbeleg(args, act);
 		const bytes = await eigenbelegPdfBytes(record, labels);

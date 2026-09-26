@@ -4,6 +4,7 @@
 	import { invoiceTotals, moneyUnit } from '@le-space/invoice/records';
 	import { formatMoney } from '@le-space/invoice/money';
 	import { formatDay } from '@le-space/invoice/document';
+	import { isEigenbeleg } from '@le-space/invoice/eigenbeleg';
 	import { t } from '$lib/i18n/index.js';
 	import { app, currentStore } from '$lib/session.svelte.js';
 	import { createDraft } from '$lib/invoices.js';
@@ -13,12 +14,17 @@
 
 	/** @param {any} invoice */
 	function stateLabel(invoice) {
+		if (isEigenbeleg(invoice)) return t('invoice.app.list.eigenbeleg');
 		if (invoice.cancelledBy) return t('invoice.app.list.cancelled');
 		return invoice.state === 'issued' ? t('invoice.app.list.issued') : t('invoice.app.list.draft');
 	}
 
 	/** @param {any} invoice */
 	function due(invoice) {
+		if (isEigenbeleg(invoice)) {
+			const { units, currency, decimals } = invoice.amount;
+			return formatMoney(units, { code: currency, decimals });
+		}
 		try {
 			return formatMoney(invoiceTotals(invoice).due, moneyUnit(invoice));
 		} catch {
@@ -95,8 +101,14 @@
 									<span class="ml-1 text-xs text-faint">{stateLabel(invoice)}</span>
 								{/if}
 							</td>
-							<td class="px-3 py-2 text-text">{invoice.customer?.name || '—'}</td>
-							<td class="px-3 py-2 text-text">{formatDay(invoice.issueDate)}</td>
+							<td class="px-3 py-2 text-text"
+								>{(isEigenbeleg(invoice)
+									? invoice.counterparty?.name || invoice.requestedBy?.label
+									: invoice.customer?.name) || '—'}</td
+							>
+							<td class="px-3 py-2 text-text"
+								>{formatDay(isEigenbeleg(invoice) ? invoice.date : invoice.issueDate)}</td
+							>
 							<td class="px-3 py-2 text-right font-mono text-heading">{due(invoice)}</td>
 						</tr>
 					{/each}

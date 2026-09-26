@@ -32,8 +32,81 @@ export const app = $state({
 	/** @type {StoredRecord[]} */
 	customers: [],
 	/** @type {ReturnType<typeof normaliseInvoiceSettings> | null} */
-	settings: null
+	settings: null,
+	/** What the UCEP node is doing (ucep/): paired apps reach this one through it. */
+	ucep: {
+		/** @type {'off' | 'starting' | 'running' | 'failed'} */
+		status: 'off',
+		/** @type {string | null} */
+		peerId: null,
+		/** whether a relay holds a reservation for us, so another browser can reach us */
+		online: false,
+		/** @type {string | null} */
+		error: null,
+		/** @type {any[]} pairings waiting for the human's word (PendingPairing) */
+		pending: [],
+		/** @type {any[]} the apps paired with this one (Grant) */
+		grants: []
+	}
 });
+
+/** @type {{ node: any, provider: any, relays: string[] } | null} */
+let ucep = null;
+
+/** The running provider, for the pairing page. */
+export function currentProvider() {
+	return ucep?.provider ?? null;
+}
+
+async function refreshGrants() {
+	if (ucep) app.ucep.grants = await ucep.provider.grants();
+}
+
+/**
+ * Start UCEP in the background once the books are open: a relay that cannot
+ * be reached must not keep anybody from their invoices.
+ */
+async function startUcep() {
+	if (!session || ucep) return;
+	app.ucep.status = 'starting';
+	app.ucep.error = null;
+	try {
+		const { startUcepNode, relayAddrs, reachable } = await import('./ucep/net.js');
+		const { createInvoiceProvider } = await import('./ucep/provider.js');
+		const relays = relayAddrs();
+		const node = await startUcepNode({ seed: session.ucepSeed, relays });
+		const provider = createInvoiceProvider({
+			libp2p: node,
+			store: session.store,
+			// A plain copy: the provider clones the issuer into the record, and a
+			// Svelte state proxy cannot be cloned.
+			settings: () => $state.snapshot(app.settings),
+			t
+		});
+		await provider.start();
+		ucep = { node, provider, relays };
+		app.ucep.peerId = node.peerId.toString();
+		const online = () => (app.ucep.online = reachable(node));
+		node.addEventListener('connection:open', online);
+		node.addEventListener('connection:close', online);
+		node.addEventListener('self:peer:update', online);
+		online();
+		provider.events.addEventListener('pairing:pending', (/** @type {any} */ e) => {
+			app.ucep.pending = [...app.ucep.pending.filter((p) => p.id !== e.detail.id), e.detail];
+		});
+		provider.events.addEventListener('pairing:granted', (/** @type {any} */ e) => {
+			app.ucep.pending = app.ucep.pending.filter((p) => p.peerId !== e.detail.consumerPeerId);
+			refreshGrants();
+		});
+		provider.events.addEventListener('grant:revoked', () => refreshGrants());
+		await refreshGrants();
+		app.ucep.status = 'running';
+	} catch (error) {
+		console.error('UCEP did not start:', error);
+		app.ucep.status = 'failed';
+		app.ucep.error = error instanceof Error ? error.message : String(error);
+	}
+}
 
 /** @type {Session | null} */
 let session = null;
@@ -79,6 +152,8 @@ async function unlockWith(credential) {
 	}
 	await refresh();
 	installE2EHooks();
+	// Not awaited: the books are open, whatever the relay does.
+	startUcep();
 }
 
 /**
@@ -120,7 +195,12 @@ export function unlockStoredPasskey() {
 /** Close the store and forget the session: the keys go with it. */
 export async function lock() {
 	const closing = session;
+	const closingUcep = ucep;
 	session = null;
+	ucep = null;
+	app.ucep = { status: 'off', peerId: null, online: false, error: null, pending: [], grants: [] };
+	await closingUcep?.provider.stop().catch(() => {});
+	await closingUcep?.node.stop().catch(() => {});
 	app.status = 'locked';
 	app.did = null;
 	app.invoices = [];
@@ -141,6 +221,8 @@ function installE2EHooks() {
 		did: () => app.did,
 		identityHash: () => session?.identityHash,
 		peerId: () => session?.peerId,
+		ucepPeerId: () => app.ucep.peerId,
+		ucepOnline: () => app.ucep.online,
 		secrets: () => {
 			const s = session?.secretsForE2E;
 			return s

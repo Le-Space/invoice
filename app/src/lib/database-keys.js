@@ -33,6 +33,12 @@ export const DB_KEY_INFO = 'invoice/db-key/v1';
 /** Bumping this renames every database: existing data is no longer found. */
 export const DB_NAME_INFO = 'invoice/db-name/v1';
 
+/**
+ * Bumping this gives the app another libp2p peer id: every paired app would
+ * have to pair again.
+ */
+export const PEER_KEY_INFO = 'invoice/peer-key/v1';
+
 const KEY_BYTES = 32;
 const NAME_BYTES = 16;
 
@@ -103,4 +109,21 @@ export async function deriveDatabaseName(prfOutput, collection) {
 	}
 	const suffix = await hkdf(prfOutput, `${DB_NAME_INFO}:${collection}`, NAME_BYTES);
 	return `invoice.${collection}.${Array.from(suffix, (b) => b.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * The seed of the app's libp2p peer key (Ed25519), for UCEP.
+ *
+ * A paired app finds this one by its peer id and keeps its grant under it, so
+ * the id has to stay the same from one unlock to the next — and on every
+ * device the passkey is synced to. It is derived like every other key here,
+ * under its own info string, and never written anywhere.
+ *
+ * @param {Uint8Array} prfOutput
+ * @param {string} [info]
+ * @returns {Promise<Uint8Array>} 32 bytes
+ */
+export async function derivePeerKeySeed(prfOutput, info = PEER_KEY_INFO) {
+	assertPrfOutput(prfOutput);
+	return hkdf(prfOutput, info, KEY_BYTES);
 }
