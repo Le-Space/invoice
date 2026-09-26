@@ -1,7 +1,9 @@
 name: CI
 
-# The pure invoice modules: their specs and their formatting. No network, no
-# browser; the PDF is drawn and read back in memory.
+# core: the pure invoice modules, their specs and formatting; the PDF is drawn
+# and read back in memory. app: the PWA under app/ — lint, types, unit specs
+# (a real OrbitDB and Helia in Node), the build, and the browser specs with a
+# virtual passkey.
 
 permissions:
   contents: read
@@ -33,3 +35,40 @@ jobs:
         run: pnpm lint
       - name: Test
         run: pnpm test
+
+  app:
+    runs-on: ubuntu-latest
+    # Same Playwright version as app/package.json, so the browsers are there.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      # The Playwright image runs as root; git refuses a checkout owned by
+      # someone else without it.
+      - name: Let git read the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.x'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm app:lint
+      - name: Types
+        run: pnpm app:check
+      - name: Unit tests
+        run: pnpm app:test
+      - name: Build
+        run: pnpm app:build
+      - name: Browser specs
+        run: pnpm app:e2e
+      - name: Keep the evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: app/test-results/
+          retention-days: 7

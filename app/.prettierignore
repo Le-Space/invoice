@@ -1,0 +1,9 @@
+# Package managers
+pnpm-lock.yaml
+
+# Generated
+/.svelte-kit/
+/build/
+/test-results/
+/playwright-report/
+/static/

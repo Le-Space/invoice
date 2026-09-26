@@ -1,0 +1,11 @@
+node_modules
+/.svelte-kit
+/build
+/test-results
+/playwright-report
+coverage
+.env
+.env.*
+!.env.example
+vite.config.js.timestamp-*
+**/__screenshots__/

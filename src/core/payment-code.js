@@ -95,7 +95,7 @@ export function payToAddress(currency, crypto) {
  *   label?: string,
  *   message?: string
  * }} params
- * @returns {{ payload: string, address: string, withAmount: boolean } | null}
+ * @returns {{ payload: string, address: string, withAmount: boolean, network: string } | null}
  */
 export function cryptoPaymentCode({
 	currency,

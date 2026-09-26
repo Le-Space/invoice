@@ -6,7 +6,8 @@
 	"license": "MIT",
 	"type": "module",
 	"exports": {
-		"./*": "./src/core/*.js"
+		"./*": "./src/core/*.js",
+		"./i18n/*": "./src/i18n/*"
 	},
 	"engines": {
 		"node": ">=22"
@@ -14,7 +15,13 @@
 	"scripts": {
 		"test": "vitest --run",
 		"lint": "prettier --check .",
-		"format": "prettier --write ."
+		"format": "prettier --write .",
+		"app:dev": "pnpm --filter @le-space/invoice-app dev",
+		"app:build": "pnpm --filter @le-space/invoice-app build",
+		"app:check": "pnpm --filter @le-space/invoice-app check",
+		"app:test": "pnpm --filter @le-space/invoice-app test:unit",
+		"app:e2e": "pnpm --filter @le-space/invoice-app test:e2e",
+		"app:lint": "pnpm --filter @le-space/invoice-app lint"
 	},
 	"dependencies": {
 		"@noble/hashes": "2.4.0",

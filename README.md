@@ -66,7 +66,25 @@ USDC). `applyChainTemplate` sets a draft up for a chain — currency, decimals,
 network, the usual lines — and `chainTemplateText` gives the letter to issue
 it with, in German or English.
 
-Next in milestone M5: the app, a PWA with its own peer-to-peer store.
+## The app
+
+`app/` is a PWA (SvelteKit 2, Svelte 5) on the core. A passkey opens it: its
+PRF answer derives the key every OrbitDB database is sealed with, and the
+OrbitDB signing key, so nothing is readable on disk and no private key is kept
+(`app/src/lib/node.js`, `database-keys.js`, `session-identities.js`). The
+session and store layer comes from Le-Space/belege, where its author wrote it,
+and is published here under MIT.
+
+- Invoices: a list, a draft editor (customer, dates, tax mode, currency and
+  network, the euro rate for the VAT, lines), issuing with the next number of
+  this passkey's circle, the PDF, and a Storno.
+- A new invoice can start from a chain template (NYM, AKT, BTC, ETH, USDC on
+  Base).
+- Settings: the issuer, the bank, the crypto addresses (checked for their
+  network), the default tax mode and payment terms.
+
+Not yet: sync between one's own devices and the UCEP invoice extension that
+lets Belege ask for a receipt (milestone M8).
 
 Later: e-invoices (EN 16931, ZUGFeRD/XRechnung), and the invoice extension of
 [UCEP](https://github.com/Le-Space/ucep-spec) so that
@@ -76,8 +94,11 @@ Later: e-invoices (EN 16931, ZUGFeRD/XRechnung), and the invoice extension of
 
 ```bash
 pnpm install
-pnpm test
+pnpm test          # the core
 pnpm lint
+pnpm app:dev       # the app, on http://localhost:5173
+pnpm app:test      # the app's unit specs
+pnpm app:e2e       # the app in a browser, with a virtual passkey
 ```
 
 ## License
