@@ -22,6 +22,8 @@ commit messages point to pull requests there.
 | `template.js`                 | Letter and closing from a Markdown template the reader owns                        |
 | `pdf.js`                      | The PDF (pdf-lib, embedded DejaVu font)                                            |
 | `girocode.js`                 | EPC069-12 GiroCode for a SEPA transfer                                             |
+| `bip21.js`                    | BIP-21 URI for a Bitcoin payment, address checksum checked                         |
+| `eip681.js`                   | EIP-681 URI for Ether or an ERC-20 token on any EVM chain, EIP-55 checksum         |
 | `duplicates.js`               | One number on two invoices is reported, not renumbered                             |
 
 `src/i18n/` – the German and English words of the printed invoice.
@@ -34,8 +36,8 @@ Euro only: `money.js` is built on euro cents. The plan (milestone M5):
    (records, money, PDF).
 2. Invoice lines from crypto transactions (quantity in the smallest unit, as a
    string, with the rate and its source).
-3. Payment codes next to the GiroCode: BIP-21 (Bitcoin) and EIP-681 (Ethereum,
-   ERC-20), each as its own pure payload builder.
+3. Payment codes next to the GiroCode: the payload builders for BIP-21 and
+   EIP-681 are here; the PDF prints them once an invoice has a crypto currency.
 4. Templates per chain.
 5. The app: a PWA with its own peer-to-peer store.
 
