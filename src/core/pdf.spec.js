@@ -21,7 +21,12 @@ const ISSUER = {
 	phone: '+49 000 0000',
 	web: 'https://example.org',
 	bank: { name: 'Testbank', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' },
-	crypto: { btc: 'bc1qexample', eth: '' },
+	crypto: {
+		btc: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+		eth: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+		nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc',
+		akt: 'akash1qyqszqgpqyqszqgpqyqszqgpqyqszqgplgve5x'
+	},
 	register: {
 		court: 'Amtsgericht Musterstadt',
 		number: 'HRB 00000',

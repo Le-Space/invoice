@@ -19,7 +19,8 @@ import {
 const ISSUER = {
 	name: 'Wolkenfabrik Hosting UG (haftungsbeschränkt)',
 	address: 'Musterstadt',
-	vatId: 'DE000000000'
+	vatId: 'DE000000000',
+	crypto: { nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc' }
 };
 
 const codes = (/** @type {{ code: string }[]} */ problems) => problems.map((p) => p.code);
@@ -229,6 +230,22 @@ describe('an invoice in another currency', () => {
 		const lines = [emptyLine({ description: 'Beratung', unitPrice: '10000', vatRate: 0 })];
 		expect(draftProblems(nym({ lines }), { issuer: ISSUER })).toEqual([]);
 		expect(draftProblems(nym({ taxMode: 'kleinunternehmer' }), { issuer: ISSUER })).toEqual([]);
+	});
+
+	it('needs an address to be paid to, valid on its chain', () => {
+		const withRate = nym({ eurRate: RATE });
+		expect(draftProblems(withRate, { issuer: ISSUER })).toEqual([]);
+		expect(codes(draftProblems(withRate, { issuer: { ...ISSUER, crypto: { nym: '' } } }))).toEqual([
+			'invoice.problem.payAddress'
+		]);
+		// An Akash address is no NYM address.
+		expect(
+			codes(
+				draftProblems(withRate, {
+					issuer: { ...ISSUER, crypto: { nym: 'akash1qyqszqgpqyqszqgpqyqszqgpqyqszqgplgve5x' } }
+				})
+			)
+		).toEqual(['invoice.problem.payAddress']);
 	});
 
 	it('refuses a currency it does not know', () => {

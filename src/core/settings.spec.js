@@ -44,7 +44,7 @@ describe('normaliseInvoiceSettings', () => {
 		const { issuer } = normaliseInvoiceSettings(stored, ALICE);
 		expect(issuer.bank).toEqual({ name: '', iban: '', bic: '' });
 		expect(issuer.register).toEqual({ court: '', number: '', managingDirector: '' });
-		expect(issuer.crypto).toEqual({ btc: '', eth: '' });
+		expect(issuer.crypto).toEqual({ btc: '', eth: '', nym: '', akt: '' });
 		expect(issuer.logo).toBe('');
 	});
 

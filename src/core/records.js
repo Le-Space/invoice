@@ -22,6 +22,7 @@
 
 import { VAT_CURRENCY, currencyOf } from './currency.js';
 import { computeTotals, inEuroCents, parseRate, toUnits } from './money.js';
+import { PAYMENT_SCHEMES, payToAddress } from './payment-code.js';
 
 /**
  * Integer division rounding half away from zero, for rescaling a price.
@@ -193,7 +194,7 @@ export function requiredNoteCode(taxMode) {
  * translation is caught by `catalogue.spec.js`.
  *
  * @param {ReturnType<typeof emptyDraft>} draft
- * @param {{ issuer?: Partial<Party> }} [context]
+ * @param {{ issuer?: Partial<Party> & { crypto?: Record<string, string> } }} [context]
  * @returns {Problem[]}
  */
 export function draftProblems(draft, { issuer } = {}) {
@@ -259,6 +260,15 @@ export function draftProblems(draft, { issuer } = {}) {
 		) {
 			problems.push({ code: 'invoice.problem.eurRateMonth', field: 'eurRate' });
 		}
+	}
+	// An invoice in a crypto currency is paid to an address, and one that names
+	// none — or one that is not an address on that chain — cannot be paid.
+	if (
+		currency &&
+		Object.hasOwn(PAYMENT_SCHEMES, currency.code) &&
+		!payToAddress(currency.code, issuer?.crypto)
+	) {
+		problems.push({ code: 'invoice.problem.payAddress', field: 'issuer.crypto' });
 	}
 
 	return problems;
