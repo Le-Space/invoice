@@ -15,7 +15,7 @@ import { giroCodePayload, remittanceFor } from './girocode.js';
 import { fillPlaceholders, parseTemplate, renderBlock, templateContext } from './template.js';
 import { VAT_CURRENCY, currencyOf } from './currency.js';
 import { formatAmount, formatMoney } from './money.js';
-import { invoiceTotals, upgradeInvoice, vatInEuroCents } from './records.js';
+import { invoiceTotals, moneyUnit, upgradeInvoice, vatInEuroCents } from './records.js';
 
 /** @typedef {Record<string, string>} Labels */
 
@@ -136,7 +136,8 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 	invoice = upgradeInvoice(invoice);
 	const totals = invoiceTotals(invoice);
 	const currency = invoice.currency;
-	const money = (/** @type {string} */ amount) => formatMoney(amount, currency);
+	const unit = moneyUnit(invoice);
+	const money = (/** @type {string} */ amount) => formatMoney(amount, unit);
 	const taxInEuroCents = vatInEuroCents(invoice, totals);
 	const issuer = invoice.issuer ?? {};
 	const customer = invoice.customer ?? {};
@@ -211,9 +212,9 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 				.filter(Boolean),
 			quantity: formatQuantity(line.quantity),
 			unit: String(line.unit ?? ''),
-			unitPrice: formatAmount(line.unitPrice, currency),
+			unitPrice: formatAmount(line.unitPrice, unit),
 			vat: invoice.taxMode === 'standard' ? `${line.vatRate} %` : '—',
-			net: formatAmount(line.net, currency)
+			net: formatAmount(line.net, unit)
 		})),
 		/** The summing block, ending on the amount somebody has to pay. */
 		// The rows stay plain and the note names the currency once, as the

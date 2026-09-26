@@ -292,6 +292,7 @@ describe('an invoice in another currency', () => {
 	const nym = () =>
 		issued({
 			currency: 'NYM',
+			decimals: 6,
 			eurRate: RATE,
 			lines: [emptyLine({ description: 'Mixnode-Betrieb', quantity: 3, unitPrice: '1500000' })]
 		});

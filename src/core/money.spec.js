@@ -171,6 +171,22 @@ describe('formatMoney', () => {
 	});
 });
 
+describe('an amount read with the decimals its record says', () => {
+	it('uses them, not the table', () => {
+		expect(formatAmount('150', { code: 'NYM', decimals: 2 })).toBe('1,50');
+		expect(plain(formatMoney('150', { code: 'ETH', decimals: 2 }))).toBe('1,50 ETH');
+		expect(parseAmount('1,5', { code: 'ETH', decimals: 18 })).toBe('1500000000000000000');
+		expect(inEuroCents('1000000000000000000', { code: 'ETH', decimals: 18 }, '3000')).toBe(
+			'300000'
+		);
+	});
+
+	it('refuses decimals that are none', () => {
+		expect(parseAmount('1', { code: 'NYM', decimals: -1 })).toBeNull();
+		expect(inEuroCents('1', { code: 'NYM', decimals: 1.5 }, '1')).toBeNull();
+	});
+});
+
 describe('formatAmount', () => {
 	it('is the number alone, as in the table', () => {
 		expect(formatAmount('146652')).toBe('1.466,52');

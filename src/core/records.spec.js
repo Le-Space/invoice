@@ -9,6 +9,7 @@ import {
 	isInvoiceKey,
 	issue,
 	requiredNoteCode,
+	moneyUnit,
 	totalsDisagree,
 	upgradeInvoice
 } from './records.js';
@@ -205,7 +206,7 @@ describe('an invoice in another currency', () => {
 	/** 3 × 1.5 NYM at 19 % */
 	const nym = (/** @type {any} */ changes = {}) =>
 		readyDraft({
-			...emptyDraft({ currency: 'NYM' }),
+			...emptyDraft({ currency: 'NYM', issueDate: '2026-09-24' }),
 			customer: { name: 'Stromwerk Test AG', address: 'Probehausen', vatId: '' },
 			lines: [emptyLine({ description: 'Mixnode-Betrieb', quantity: 3, unitPrice: '1500000' })],
 			...changes
@@ -234,6 +235,33 @@ describe('an invoice in another currency', () => {
 		]);
 	});
 
+	it('keeps its decimals on the record, and refuses a draft whose decimals do not fit', () => {
+		expect(nym().decimals).toBe(6);
+		// The currency changed, the decimals did not: every price would be off by 10⁴.
+		expect(codes(draftProblems(nym({ decimals: 2, eurRate: RATE }), { issuer: ISSUER }))).toEqual([
+			'invoice.problem.currency'
+		]);
+	});
+
+	it('wants the rate of the month the service was rendered in', () => {
+		const lastMonth = { ...RATE, date: '2026-08-31' };
+		expect(codes(draftProblems(nym({ eurRate: lastMonth }), { issuer: ISSUER }))).toEqual([
+			'invoice.problem.eurRateMonth'
+		]);
+	});
+
+	it('reads an issued invoice in the decimals it was issued with', () => {
+		const invoice = issue(nym({ eurRate: RATE }), {
+			number: '2026-00000-001',
+			issuer: ISSUER,
+			issuedBy: 'did'
+		});
+		expect(invoice.decimals).toBe(6);
+		// Were the table to change, the record still says 6.
+		expect(moneyUnit(invoice)).toEqual({ code: 'NYM', decimals: 6 });
+		expect(moneyUnit({ ...invoice, decimals: 3 })).toEqual({ code: 'NYM', decimals: 3 });
+	});
+
 	it('freezes the currency, the rate and the VAT in euros when it is issued', () => {
 		const invoice = issue(nym({ eurRate: RATE }), {
 			number: '2026-00000-001',
@@ -259,6 +287,7 @@ describe('an invoice in another currency', () => {
 		});
 		const storno = cancellationFor(invoice, { issueDate: '2026-09-25' });
 		expect(storno.currency).toBe('NYM');
+		expect(storno.decimals).toBe(6);
 		expect(storno.eurRate).toEqual(RATE);
 		expect(storno.lines[0]).toMatchObject({ quantity: -3, unitPrice: '1500000' });
 	});
@@ -285,6 +314,7 @@ describe('upgradeInvoice', () => {
 	it('reads an invoice from before currencies as a euro invoice in strings of cents', () => {
 		const upgraded = upgradeInvoice(legacy);
 		expect(upgraded.currency).toBe('EUR');
+		expect(upgraded.decimals).toBe(2);
 		expect(upgraded.lines[0]).toEqual({
 			description: 'Tagessatz',
 			quantity: 2,

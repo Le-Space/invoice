@@ -23,6 +23,22 @@
 import { VAT_CURRENCY, currencyOf } from './currency.js';
 import { computeTotals, inEuroCents, parseRate, toUnits } from './money.js';
 
+/**
+ * What the amounts of this invoice are in: its currency and the decimals it
+ * was written with. Both are on the record, so it reads the same however the
+ * table in `currency.js` changes later.
+ *
+ * @param {{ currency?: string, decimals?: number }} invoice
+ * @returns {{ code: string, decimals: number }}
+ */
+export function moneyUnit(invoice) {
+	const code = invoice.currency ?? VAT_CURRENCY;
+	return {
+		code,
+		decimals: invoice.decimals ?? /** @type {number} */ (currencyOf(code)?.decimals)
+	};
+}
+
 /** Every invoice entry is keyed with this, so it is not read as a todo. */
 export const INVOICE_PREFIX = 'invoice/';
 
@@ -120,6 +136,11 @@ export function emptyDraft({ taxMode = 'standard', currency = 'EUR', customer, i
 		taxMode,
 		/** What every amount on this invoice is in (`currency.js`). */
 		currency,
+		/**
+		 * Where the decimal point goes in every amount of this invoice, copied
+		 * from `currency.js` now rather than looked up when it is read.
+		 */
+		decimals: currencyOf(currency)?.decimals ?? 2,
 		/** Needed once the invoice is not in euros and shows VAT. */
 		eurRate: /** @type {EurRate | null} */ (null),
 		customer: /** @type {Recipient} */ ({
@@ -207,12 +228,23 @@ export function draftProblems(draft, { issuer } = {}) {
 	});
 
 	const currency = currencyOf(draft.currency);
-	if (!currency) {
+	// A draft counts in the decimals its currency has today; they are frozen
+	// with everything else when it is issued. A draft whose currency changed
+	// and whose decimals did not would read every price wrong by 10ⁿ.
+	if (!currency || draft.decimals !== currency.decimals) {
 		problems.push({ code: 'invoice.problem.currency', field: 'currency' });
-	} else if (currency.code !== VAT_CURRENCY && showsVat(draft) && !validEurRate(draft.eurRate)) {
+	} else if (currency.code !== VAT_CURRENCY && showsVat(draft)) {
 		// Art. 230 MwStSystRL, §16 Abs. 6 UStG: the VAT is owed in euros, so an
-		// invoice in dollars or NYM has to say what its VAT is in euros.
-		problems.push({ code: 'invoice.problem.eurRate', field: 'eurRate' });
+		// invoice in dollars or NYM has to say what its VAT is in euros — at the
+		// rate of the month the service was rendered in, not of the day it is
+		// printed.
+		if (!validEurRate(draft.eurRate)) {
+			problems.push({ code: 'invoice.problem.eurRate', field: 'eurRate' });
+		} else if (
+			String(draft.eurRate?.date).slice(0, 7) !== String(draft.deliveryDate ?? '').slice(0, 7)
+		) {
+			problems.push({ code: 'invoice.problem.eurRateMonth', field: 'eurRate' });
+		}
 	}
 
 	return problems;
@@ -266,7 +298,11 @@ export function vatInEuroCents(invoice, totals) {
 	if (currency === VAT_CURRENCY || !showsVat(invoice) || !validEurRate(invoice.eurRate)) {
 		return null;
 	}
-	return inEuroCents(totals.tax, currency, /** @type {EurRate} */ (invoice.eurRate).eurPerUnit);
+	return inEuroCents(
+		totals.tax,
+		moneyUnit(invoice),
+		/** @type {EurRate} */ (invoice.eurRate).eurPerUnit
+	);
 }
 
 /**
@@ -308,6 +344,8 @@ export function upgradeInvoice(invoice) {
 	return {
 		...invoice,
 		currency: invoice.currency ?? VAT_CURRENCY,
+		// invoice01 knew only euro cents; anything newer carries its own.
+		decimals: invoice.decimals ?? (invoice.currency ? currencyOf(invoice.currency)?.decimals : 2),
 		...(lines === undefined ? {} : { lines }),
 		...(totals === undefined ? {} : { totals })
 	};
@@ -396,7 +434,10 @@ export function cancellationFor(issued, { issueDate = isoDay() } = {}) {
 			customer: issued.customer,
 			issueDate
 		}),
-		// The Storno takes back the same VAT in euros, so it states the same rate.
+		// The Storno takes back the same VAT in euros, so it states the same
+		// rate — the one of the invoice it cancels, never today's — and counts
+		// in the same decimals.
+		decimals: moneyUnit(issued).decimals,
 		eurRate: issued.eurRate ?? null,
 		deliveryDate: issued.deliveryDate,
 		paymentTermsDays: issued.paymentTermsDays,

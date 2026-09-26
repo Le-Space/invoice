@@ -85,7 +85,8 @@
 			"patternYear": "Ein Kreis, der jedes Jahr neu beginnt, braucht das Jahr in der Nummer — sonst entstehen doppelte Nummern.",
 			"patternMonth": "Ein Kreis, der jeden Monat neu beginnt, braucht Jahr und Monat in der Nummer.",
 			"currency": "Diese Währung kennt die Rechnung nicht.",
-			"eurRate": "Eine Rechnung in einer anderen Währung als Euro gibt die USt. auch in Euro an: Kurs, Quelle und Datum fehlen."
+			"eurRate": "Eine Rechnung in einer anderen Währung als Euro gibt die USt. auch in Euro an: Kurs, Quelle und Datum fehlen.",
+			"eurRateMonth": "Der Kurs muss aus dem Monat der Leistung stammen (§ 16 Abs. 6 UStG)."
 		},
 		"note": {
 			"kleinunternehmer": "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.",

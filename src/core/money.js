@@ -1,6 +1,12 @@
 /**
  * Money for invoices, in integer units of the invoice's currency.
  *
+ * Where the arithmetic happens: every sum and product below is a BigInt.
+ * Strings are only what goes in and comes out — the form a record keeps an
+ * amount in, because JSON has no BigInt — and they are parsed with
+ * `toUnits`, which takes nothing but an optional sign and digits. No amount
+ * is ever a float, so 0.1 + 0.2 cannot happen here.
+ *
  * Floating-point euros drift (0.1 + 0.2), and an invoice whose lines do not add
  * up to its totals by one cent fails EN 16931's own consistency rules
  * (BR-CO-10, BR-CO-15) — and later the e-invoice validator. So every amount here
@@ -13,6 +19,31 @@
 import { VAT_CURRENCY, currencyOf } from './currency.js';
 
 const QTY_SCALE = 10_000n;
+
+/**
+ * What an amount is in: a currency code, or — as an invoice gives it — the
+ * code together with the decimals the invoice was written with.
+ *
+ * @typedef {string | { code: string, decimals: number }} MoneyUnit
+ */
+
+/**
+ * The currency, with the decimals the record says rather than what the table
+ * in `currency.js` says today. A record written with other decimals than the
+ * table now has must still be read the way it was written; a factor of 10ⁿ
+ * is not something to get wrong silently.
+ *
+ * @param {MoneyUnit} unit
+ * @returns {{ code: string, decimals: number, kind: 'fiat' | 'crypto', symbol: string } | null}
+ */
+function resolve(unit) {
+	if (typeof unit === 'string') return currencyOf(unit);
+	const known = currencyOf(unit?.code);
+	if (!known || !Number.isInteger(unit.decimals) || unit.decimals < 0 || unit.decimals > 36) {
+		return null;
+	}
+	return { ...known, decimals: unit.decimals };
+}
 
 /**
  * Integer division rounding half away from zero.
@@ -194,12 +225,12 @@ export function parseRate(text) {
  * Directive and §16 Abs. 6 UStG want the VAT in euros, at a stated rate.
  *
  * @param {string | number | bigint} amount in the smallest unit of `currency`
- * @param {string} currency
+ * @param {MoneyUnit} currency
  * @param {string} eurPerUnit
  * @returns {string | null} euro cents, or null for an unknown currency or a rate that is none
  */
 export function inEuroCents(amount, currency, eurPerUnit) {
-	const from = currencyOf(currency);
+	const from = resolve(currency);
 	const rate = parseRate(eurPerUnit);
 	const euro = currencyOf(VAT_CURRENCY);
 	if (!from || !rate || !euro) return null;
@@ -215,10 +246,10 @@ const grouping = new Intl.NumberFormat('de-DE', { useGrouping: true });
  * trailing zeros down to two, because "0,001500000000000000 ETH" helps nobody.
  *
  * @param {string | number | bigint} amount in the smallest unit
- * @param {string} [currency]
+ * @param {MoneyUnit} [currency]
  */
 export function formatAmount(amount, currency = 'EUR') {
-	const { decimals, kind } = currencyOf(currency) ?? { decimals: 2, kind: 'fiat' };
+	const { decimals, kind } = resolve(currency) ?? { decimals: 2, kind: 'fiat' };
 	const value = units(amount);
 	const negative = value < 0n;
 	const abs = negative ? -value : value;
@@ -236,10 +267,10 @@ export function formatAmount(amount, currency = 'EUR') {
  * somebody looks for: the sums and the amount due.
  *
  * @param {string | number | bigint} amount in the smallest unit
- * @param {string} [currency]
+ * @param {MoneyUnit} [currency]
  */
 export function formatMoney(amount, currency = 'EUR') {
-	const symbol = currencyOf(currency)?.symbol ?? String(currency);
+	const symbol = resolve(currency)?.symbol ?? String(currency);
 	return `${formatAmount(amount, currency)} ${symbol}`;
 }
 
@@ -257,11 +288,11 @@ export function formatMoney(amount, currency = 'EUR') {
  * silently change on its way in.
  *
  * @param {string | number} input
- * @param {string} [currency]
+ * @param {MoneyUnit} [currency]
  * @returns {string | null} the smallest unit, or null when the input is not a price
  */
 export function parseAmount(input, currency = 'EUR') {
-	const target = currencyOf(currency);
+	const target = resolve(currency);
 	if (!target) return null;
 	const text = String(input)
 		.replace(/\s/g, '')
