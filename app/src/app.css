@@ -1,0 +1,134 @@
+@import 'tailwindcss';
+
+/* Le-Space branding, theme-switchable, after Le-Space/simple-todo apps/escrow01
+   (src/app.css) at f0d3df4.
+
+   The theme is a `.dark` class on <html> (ThemeToggle.svelte, and the no-flash
+   script in app.html). Colours are semantic variables exposed to Tailwind
+   through `@theme inline`, so one set of utilities (bg-surface, text-heading,
+   text-faint, …) follows the theme.
+
+   Changed from escrow01: the brand's light `--faint` (#6b7891) and dark
+   `--faint` (#5c677a) miss WCAG AA for text (3.9:1 on the light page, 3.1:1 on
+   the dark panel), so both are darker/lighter here; links get their own
+   `--link`, because light Cyan (#0e86c4) is 4.0:1 on white. Cyan and Coral stay
+   as they are for the mark and for decoration, where 3:1 is enough. Every
+   token pair used for text is checked in src/lib/contrast.spec.js. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+	--bg: #edf1f8; /* Starlight */
+	--surface: #ffffff;
+	--surface-2: #f2f5fb;
+	--border: #d4dcea;
+	--heading: #141b2e; /* Ink */
+	--text: #41506b;
+	--faint: #5a6782; /* brand #6b7891 is 3.9:1 on --bg */
+	--link: #0b6fa3; /* brand Cyan #0e86c4 is 4.0:1 on white */
+	--coral: #e8503f; /* light Coral */
+	--cyan: #0e86c4; /* light Cyan */
+	--identity: #1fa971;
+	--data: #c7891a;
+	--infra: #7c5cff;
+	--danger: #b91c1c;
+	--success: #047857;
+}
+
+.dark {
+	--bg: #0b0e15; /* Deep Space */
+	--surface: #141926; /* Nebula */
+	--surface-2: #1b2233;
+	--border: #232b3d; /* Horizon */
+	--heading: #edf1f8; /* Starlight */
+	--text: #a8b3c7; /* Stardust */
+	--faint: #8591a6; /* brand #5c677a is 3.1:1 on --surface */
+	--link: #58c7f3; /* Sync Cyan */
+	--coral: #ff6b5b; /* Signal Coral */
+	--cyan: #58c7f3; /* Sync Cyan */
+	--identity: #3edc97;
+	--data: #ffc24b;
+	--infra: #a78bfa;
+	--danger: #f87171;
+	--success: #34d399;
+}
+
+@theme inline {
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-surface-2: var(--surface-2);
+	--color-border: var(--border);
+	--color-heading: var(--heading);
+	--color-text: var(--text);
+	--color-faint: var(--faint);
+	--color-link: var(--link);
+	--color-coral: var(--coral);
+	--color-cyan: var(--cyan);
+	--color-identity: var(--identity);
+	--color-data: var(--data);
+	--color-infra: var(--infra);
+	--color-danger: var(--danger);
+	--color-success: var(--success);
+
+	/* Accent scales (theme-static brand hues), for buttons, focus rings, chips. */
+	--color-cyan-50: #ecf8fe;
+	--color-cyan-200: #a9def9;
+	--color-cyan-500: #38b6ef;
+	--color-cyan-800: #135a7e;
+
+	--color-coral-700: #cf3f30; /* white on it: 4.77:1 */
+	--color-coral-800: #b03d30; /* white on it: 5.91:1, the CTA's hover */
+
+	--color-identity-500: #3edc97;
+
+	--color-data-100: #fdeecb;
+	--color-data-400: #ffc24b;
+	--color-data-800: #6f4e13;
+
+	--color-infra-200: #ddd3fe;
+	--color-infra-800: #4a3a94;
+
+	/* No web font is loaded: this app makes no request it does not need. */
+	--font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+}
+
+/* In the base layer, so that utilities win: unlayered, `a { color }` beat
+   `text-text` on every tab link, and `h2 { color }` beat `text-faint`. */
+@layer base {
+	html {
+		color-scheme: light;
+	}
+	html.dark {
+		color-scheme: dark;
+	}
+
+	body {
+		background: var(--bg);
+		color: var(--text);
+		font-family: var(--font-sans);
+		-webkit-font-smoothing: antialiased;
+	}
+
+	h1,
+	h2,
+	h3 {
+		color: var(--heading);
+	}
+
+	a {
+		color: var(--link);
+	}
+
+	/* Form controls follow the theme. */
+	input:not([type='checkbox']):not([type='radio']):not([type='file']),
+	textarea,
+	select {
+		background-color: var(--surface-2);
+		border-color: var(--border);
+		color: var(--heading);
+	}
+	input::placeholder,
+	textarea::placeholder {
+		color: var(--faint);
+	}
+}

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="de">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!-- Theme before paint (after Le-Space/simple-todo apps/escrow01): the
+		     stored choice, else the system's. -->
+		<script>
+			(function () {
+				try {
+					var t = localStorage.getItem('invoice.theme');
+					if (t !== 'light' && t !== 'dark') {
+						t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+					}
+					document.documentElement.classList.toggle('dark', t === 'dark');
+					document.documentElement.style.background = t === 'dark' ? '#0B0E15' : '#EDF1F8';
+				} catch (e) {}
+			})();
+		</script>
+		<meta name="theme-color" content="#0B0E15" />
+		<meta name="robots" content="noindex, nofollow" />
+		<title>Le Space Rechnungen</title>
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>
