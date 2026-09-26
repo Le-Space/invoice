@@ -24,7 +24,7 @@ const LABELS = {
 	vatInEuro: 'USt. in EUR',
 	rateNote: 'Umrechnung der USt.: 1 {currency} = {rate} € ({source}, {date}).',
 	paymentTermsCrypto:
-		'Bitte zahlen Sie {amount} bis zum {date} an die unten genannte Adresse; die Rechnungsnummer {number} hilft uns bei Rückfragen.',
+		'Bitte zahlen Sie {amount} bis zum {date} an die angegebene Adresse; die Rechnungsnummer {number} hilft uns bei Rückfragen.',
 	netNote: 'Einzelpreise und Beträge netto in {currency}.',
 	vatId: 'USt.-IdNr.:',
 	taxNumber: 'Steuernr.:',
@@ -40,6 +40,12 @@ const LABELS = {
 	accountHolder: 'Kontoinhaber:',
 	btc: 'Bitcoin:',
 	eth: 'Ethereum:',
+	nym: 'NYM:',
+	akt: 'Akash:',
+	payCaption: '{currency}-Zahlung',
+	payHint: 'Eine Wallet, die den Code scannt, übernimmt Adresse und Betrag.',
+	payHintAddress: 'Der Code enthält die Adresse; den Betrag geben Sie bitte selbst ein.',
+	payAddress: 'Adresse: {address}',
 	reference: 'Rechnung',
 	giroCaption: 'GiroCode',
 	giroHint:
@@ -60,7 +66,12 @@ const ISSUER = {
 	phone: '+49 000 000',
 	web: 'https://example.org',
 	bank: { name: 'Testbank', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' },
-	crypto: { btc: 'bc1qexample', eth: '' },
+	crypto: {
+		btc: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+		eth: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+		nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc',
+		akt: 'akash1qyqszqgpqyqszqgpqyqszqgpqyqszqgplgve5x'
+	},
 	register: {
 		court: 'Amtsgericht Musterstadt',
 		number: 'HRB 00000',
@@ -273,7 +284,12 @@ describe('the footer', () => {
 
 	it('takes crypto accounts along when they are filled in', () => {
 		const { footer } = documentModel(issued(), LABELS);
-		expect(footer[3]).toEqual([{ label: 'Bitcoin:', value: 'bc1qexample' }]);
+		expect(footer[3]).toEqual([
+			{ label: 'Bitcoin:', value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' },
+			{ label: 'Ethereum:', value: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed' },
+			{ label: 'NYM:', value: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc' },
+			{ label: 'Akash:', value: 'akash1qyqszqgpqyqszqgpqyqszqgpqyqszqgplgve5x' }
+		]);
 	});
 
 	it('drops a line nobody filled in rather than printing empty labels', () => {
@@ -320,7 +336,7 @@ describe('an invoice in another currency', () => {
 
 	it('asks for a payment to the address, not to the bank account', () => {
 		const { payment } = documentModel(nym(), LABELS);
-		expect(payment).toContain('an die unten genannte Adresse');
+		expect(payment).toContain('an die angegebene Adresse');
 		expect(payment).not.toContain('überweisen');
 	});
 
@@ -343,5 +359,37 @@ describe('an invoice in another currency', () => {
 
 	it('carries no GiroCode, which is for euros only', () => {
 		expect(documentModel(nym(), LABELS).giro).toBeNull();
+	});
+
+	it('carries a code of the address instead, and writes the address out', () => {
+		expect(documentModel(nym(), LABELS).payCode).toEqual({
+			payload: ISSUER.crypto.nym,
+			caption: 'NYM-Zahlung',
+			hint: 'Der Code enthält die Adresse; den Betrag geben Sie bitte selbst ein.',
+			address: `Adresse: ${ISSUER.crypto.nym}`
+		});
+	});
+
+	it('puts the amount into the code where the currency has a payment URI', () => {
+		const btc = issued({
+			currency: 'BTC',
+			decimals: 8,
+			eurRate: { ...RATE, eurPerUnit: '95000' },
+			lines: [emptyLine({ description: 'Beratung', quantity: 1, unitPrice: '100000' })]
+		});
+		const { payCode } = documentModel(btc, LABELS);
+		// 0.001 BTC + 19 % = 0.00119 BTC
+		expect(payCode?.payload).toMatch(/^bitcoin:bc1q.*\?amount=0\.00119&/);
+		expect(payCode?.hint).toBe('Eine Wallet, die den Code scannt, übernimmt Adresse und Betrag.');
+		expect(
+			documentModel(
+				{ ...btc, cancels: '2026-48213-000', lines: [{ ...btc.lines[0], quantity: -1 }] },
+				LABELS
+			).payCode
+		).toBeNull();
+	});
+
+	it('has no crypto code on a euro invoice', () => {
+		expect(documentModel(issued(), LABELS).payCode).toBeNull();
 	});
 });

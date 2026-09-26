@@ -12,6 +12,7 @@
  */
 
 import { giroCodePayload, remittanceFor } from './girocode.js';
+import { cryptoPaymentCode } from './payment-code.js';
 import { fillPlaceholders, parseTemplate, renderBlock, templateContext } from './template.js';
 import { VAT_CURRENCY, currencyOf } from './currency.js';
 import { formatAmount, formatMoney } from './money.js';
@@ -284,6 +285,28 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 			return payload ? { payload, caption: labels.giroCaption, hint: labels.giroHint } : null;
 		})(),
 		/**
+		 * The code a wallet scans, for an invoice in a crypto currency: the
+		 * address, and for the currencies with a payment URI the amount too.
+		 * Absent on a Storno and where the issuer named no address.
+		 */
+		payCode: (() => {
+			const code = cryptoPaymentCode({
+				currency,
+				unit,
+				due: totals.due,
+				crypto,
+				label: issuer.name,
+				message: reference
+			});
+			if (!code) return null;
+			return {
+				payload: code.payload,
+				caption: labels.payCaption.replaceAll('{currency}', currency),
+				hint: code.withAmount ? labels.payHint : labels.payHintAddress,
+				address: labels.payAddress.replace('{address}', code.address)
+			};
+		})(),
+		/**
 		 * The three lines every page carries at its foot; a line nobody filled
 		 * in is left out rather than printed as a bare label.
 		 *
@@ -309,7 +332,12 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 					pair(labels.bic, bank.bic),
 					pair(labels.accountHolder, issuer.name && bank.iban ? issuer.name : '')
 				],
-				[pair(labels.btc, crypto.btc), pair(labels.eth, crypto.eth)]
+				[
+					pair(labels.btc, crypto.btc),
+					pair(labels.eth, crypto.eth),
+					pair(labels.nym, crypto.nym),
+					pair(labels.akt, crypto.akt)
+				]
 			]
 				.map((line) => line.filter(Boolean))
 				.filter((line) => line.length > 0)

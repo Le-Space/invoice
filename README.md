@@ -26,6 +26,7 @@ commit messages point to pull requests there.
 | `bip21.js`                    | BIP-21 URI for a Bitcoin payment, address checksum checked                                      |
 | `eip681.js`                   | EIP-681 URI for Ether or an ERC-20 token on any EVM chain, EIP-55 checksum                      |
 | `crypto-lines.js`             | Invoice lines from crypto transactions as Belege books them, with their source kept on the line |
+| `payment-code.js`             | The code a crypto invoice carries: BIP-21, EIP-681 (ETH, POL, USDC) or the address (NYM, AKT)   |
 | `duplicates.js`               | One number on two invoices is reported, not renumbered                                          |
 
 `src/i18n/` – the German and English words of the printed invoice.
@@ -49,12 +50,16 @@ the rate with its source and day, and the transaction hash, and keeps all of it
 in `line.source`. `eurRateOf` takes the booking's rate as the invoice's rate for
 the VAT in euros.
 
+An invoice in a crypto currency carries a code instead of the GiroCode
+(`payment-code.js`): BIP-21 for Bitcoin, EIP-681 for Ether, POL and USDC with
+the amount in the chain's unit, and the address alone for NYM and AKT, where
+wallets agree on no payment URI. The address comes from the issuer's settings
+and is checked for its chain; an invoice without one cannot be issued.
+
 Next in milestone M5:
 
-1. Printing the BIP-21 / EIP-681 codes on a crypto invoice, with the address to
-   pay to.
-2. Templates per chain.
-3. The app: a PWA with its own peer-to-peer store.
+1. Templates per chain (and USDC on other chains than Ethereum).
+2. The app: a PWA with its own peer-to-peer store.
 
 Later: e-invoices (EN 16931, ZUGFeRD/XRechnung), and the invoice extension of
 [UCEP](https://github.com/Le-Space/ucep-spec) so that

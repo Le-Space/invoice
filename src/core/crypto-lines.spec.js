@@ -139,7 +139,11 @@ describe('eurRateOf', () => {
 });
 
 describe('an invoice in NYM made from a transaction', () => {
-	const ISSUER = { name: 'Wolkenfabrik Hosting UG', address: 'Musterstraße 1\n12345 Musterstadt' };
+	const ISSUER = {
+		name: 'Wolkenfabrik Hosting UG',
+		address: 'Musterstraße 1\n12345 Musterstadt',
+		crypto: { nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc' }
+	};
 
 	it('can be issued with the booking’s rate, and prints where it came from', () => {
 		const draft = emptyDraft({ currency: 'NYM', issueDate: '2026-09-24' });

@@ -88,7 +88,8 @@
 			"eurRate": "An invoice in another currency than euros states its VAT in euros too: the rate, its source and its date are missing.",
 			"eurRateMonth": "The rate has to be one of the month the service was rendered in (§16(6) UStG).",
 			"cryptoTransaction": "This booking is not a crypto transaction with a quantity and a rate.",
-			"cryptoCurrency": "A transaction can only become an invoice in euros or in its own asset."
+			"cryptoCurrency": "A transaction can only become an invoice in euros or in its own asset.",
+			"payAddress": "An invoice in this currency needs a valid address to be paid to in the settings."
 		},
 		"note": {
 			"kleinunternehmer": "No VAT is charged, under §19 UStG.",
@@ -172,11 +173,17 @@
 			"accountHolder": "Account holder:",
 			"btc": "Bitcoin:",
 			"eth": "Ethereum:",
+			"nym": "NYM:",
+			"akt": "Akash:",
 			"reference": "Invoice",
 			"giroCaption": "GiroCode",
 			"giroHint": "A banking app that scans the GiroCode fills in recipient, IBAN, amount and reference by itself.",
+			"payCaption": "{currency} payment",
+			"payHint": "A wallet that scans the code fills in address and amount.",
+			"payHintAddress": "The code holds the address; please enter the amount yourself.",
+			"payAddress": "Address: {address}",
 			"paymentTerms": "Please transfer {amount} by {date} to the account below, quoting invoice number {number} as the reference.",
-			"paymentTermsCrypto": "Please pay {amount} by {date} to the address below; invoice number {number} helps with any question.",
+			"paymentTermsCrypto": "Please pay {amount} by {date} to the address given; invoice number {number} helps with any question.",
 			"paymentOnReceipt": "Payable on receipt.",
 			"page": "Page {page} of {pages}",
 			"customerNumber": "Customer no."

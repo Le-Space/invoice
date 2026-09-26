@@ -495,18 +495,21 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	// How to pay, with the code that fills the transfer in.
 	room(110);
 	y -= 10;
-	const textLeft = model.giro ? 190 : MARGIN.left;
+	// The GiroCode for euros, a wallet's code for a crypto currency: one or
+	// the other, in the same place.
+	const scan = model.giro ?? model.payCode;
+	const textLeft = scan ? 190 : MARGIN.left;
 	const textWidth = A4.width - MARGIN.right - textLeft;
 	/** Where the QR code ends, so whatever follows starts below it. */
 	let giroBottom = null;
-	if (model.giro) {
+	if (scan) {
 		const top = y + 6;
 		const code = 96;
-		await drawQrCode(page, model.giro.payload, { x: MARGIN.left, top, size: code, ink });
+		await drawQrCode(page, scan.payload, { x: MARGIN.left, top, size: code, ink });
 		// The caption belongs under the code, not across it.
 		const resume = y;
 		y = top - code - 11;
-		write(model.giro.caption, { x: MARGIN.left, size: SIZE.small, font: bold, color: faint });
+		write(scan.caption, { x: MARGIN.left, size: SIZE.small, font: bold, color: faint });
 		giroBottom = y - 6;
 		y = resume;
 	}
@@ -514,9 +517,17 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 		write(line, { x: textLeft, size: SIZE.body });
 		y -= 14;
 	}
-	if (model.giro) {
+	// The address written out, for whoever types rather than scans.
+	if (model.payCode) {
 		y -= 4;
-		for (const line of wrap(model.giro.hint, regular, SIZE.small, textWidth)) {
+		for (const line of wrap(model.payCode.address, bold, SIZE.small, textWidth)) {
+			write(line, { x: textLeft, size: SIZE.small, font: bold });
+			y -= 12;
+		}
+	}
+	if (scan) {
+		y -= 4;
+		for (const line of wrap(scan.hint, regular, SIZE.small, textWidth)) {
 			write(line, { x: textLeft, size: SIZE.small, color: faint });
 			y -= 12;
 		}
