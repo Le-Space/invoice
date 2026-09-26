@@ -67,7 +67,7 @@ jobs:
         run: pnpm app:e2e
       - name: Keep the evidence
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: app/test-results/
