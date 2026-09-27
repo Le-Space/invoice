@@ -53,6 +53,15 @@ export const app = $state({
 /** @type {{ node: any, provider: any, relays: string[] } | null} */
 let ucep = null;
 
+/** Only when an app is paired: a grant is kept in the sealed settings. */
+async function startUcepIfPaired() {
+	if (!session) return;
+	const grants = await session.store.settings.list({
+		where: (r) => typeof r.key === 'string' && r.key.startsWith('ucep/grant/') && r.value
+	});
+	if (grants.length > 0) await startUcep();
+}
+
 /** The running provider, for the pairing page. */
 export function currentProvider() {
 	return ucep?.provider ?? null;
@@ -63,10 +72,13 @@ async function refreshGrants() {
 }
 
 /**
- * Start UCEP in the background once the books are open: a relay that cannot
- * be reached must not keep anybody from their invoices.
+ * Start UCEP: after unlocking only when an app is paired (the relay sees this
+ * device's IP address, and nobody who does not use UCEP should pay that),
+ * otherwise when the person asks for it under "Verbindungen". In the
+ * background: a relay that cannot be reached must not keep anybody from their
+ * invoices.
  */
-async function startUcep() {
+export async function startUcep() {
 	if (!session || ucep) return;
 	app.ucep.status = 'starting';
 	app.ucep.error = null;
@@ -153,7 +165,7 @@ async function unlockWith(credential) {
 	await refresh();
 	installE2EHooks();
 	// Not awaited: the books are open, whatever the relay does.
-	startUcep();
+	startUcepIfPaired();
 }
 
 /**

@@ -40,8 +40,12 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 		await page.getByTestId('save-settings').click();
 		await expect(page.getByRole('status')).toContainText('Gespeichert');
 
-		// The app is reachable through the relay.
+		// Not paired yet: nothing connects to the relay until asked.
 		await page.getByRole('link', { name: 'Verbindungen' }).click();
+		await expect(page.getByTestId('ucep-start')).toBeVisible();
+		await expect(page.getByTestId('ucep-peer-id')).toHaveCount(0);
+		await page.getByTestId('ucep-start').click();
+		// Then the app is reachable through the relay.
 		await expect(page.getByTestId('ucep-online')).toHaveAttribute('data-online', 'true');
 		const providerId = /** @type {string} */ (await page.getByTestId('ucep-peer-id').textContent());
 		expect(providerId).toMatch(/^12D3Koo/);
@@ -124,7 +128,8 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 			stranger.call(providerId, 'invoice', 'create-eigenbeleg', args)
 		).rejects.toMatchObject({ code: 'PAIRING_REQUIRED' });
 
-		// The same peer id after a reload: the paired app still finds it, the grant still holds.
+		// The same peer id after a reload, connected without being asked (an app
+		// is paired): the paired app still finds it, the grant still holds.
 		await page.reload();
 		await page.getByRole('button', { name: 'Mit gespeichertem Passkey entsperren' }).click();
 		await page.getByRole('link', { name: 'Verbindungen' }).click();

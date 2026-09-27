@@ -4,7 +4,7 @@
 	// then the same six digits on both screens, and this human says yes.
 	import { renderSVG } from 'uqr';
 	import { t } from '$lib/i18n/index.js';
-	import { app, currentProvider } from '$lib/session.svelte.js';
+	import { app, currentProvider, startUcep } from '$lib/session.svelte.js';
 	import { SCOPES } from '$lib/ucep/provider.js';
 
 	let offer = $state({ [SCOPES.eigenbeleg]: true, [SCOPES.read]: true });
@@ -101,6 +101,11 @@
 					>{copied === 'peer' ? t('ucep.pairing.copied') : t('ucep.pairing.copy')}</button
 				>
 			</p>
+		{:else if app.ucep.status === 'off'}
+			<p class="text-xs text-faint">{t('ucep.pairing.offHint')}</p>
+			<button type="button" class={primary} onclick={startUcep} data-testid="ucep-start"
+				>{t('ucep.pairing.start')}</button
+			>
 		{:else if app.ucep.status === 'failed'}
 			<p class="text-sm text-danger" role="alert">{t('ucep.pairing.failed')} {app.ucep.error}</p>
 		{:else}

@@ -90,9 +90,13 @@ and is published here under MIT.
   An app paired by invitation (link or QR code) or by a six-digit code asks
   for an Eigenbeleg (`create-eigenbeleg`), its state (`status`) and its PDF
   (`get-pdf`); a stranger gets `help` and nothing else. The peer id is derived
-  from the passkey, the grants are kept sealed.
+  from the passkey, the grants are kept sealed. The app connects to the relay
+  only while an app is paired, or when asked to under "Verbindungen": the relay
+  sees the device's IP address.
 
-Not yet: sync between one's own devices, `create-draft`, and fetching a PDF by
+Not yet: pairing by QR code without any relay (the alpha module
+`@le-space/libp2p-webrtc-qr` exchanges WebRTC signaling as QR codes), sync
+between one's own devices, `create-draft`, and fetching a PDF by
 CID over Bitswap on a relayed connection.
 
 Later: e-invoices (EN 16931, ZUGFeRD/XRechnung), and the invoice extension of
