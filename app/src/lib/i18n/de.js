@@ -27,6 +27,9 @@ export default {
 			peerId: 'Peer-ID',
 			copy: 'Kopieren',
 			copied: 'Kopiert',
+			start: 'Verbindung aufbauen',
+			offHint:
+				'Erst wenn du hier klickst, verbindet sich die App mit dem Relay; danach nur, solange eine App gekoppelt ist. Das Relay sieht die IP-Adresse dieses Geräts, deine Rechnungen nicht.',
 			starting: 'Verbindung wird aufgebaut …',
 			failed: 'Die Verbindung konnte nicht aufgebaut werden:',
 			invitationHeading: 'Einladung',

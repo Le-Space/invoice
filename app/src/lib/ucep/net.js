@@ -8,6 +8,11 @@
 // and accepts WebRTC so the two can talk directly once they have met. Noise
 // encrypts every connection end to end; the relay sees ciphertext.
 //
+// Pairing by QR code without any relay is the next step: the alpha module
+// @le-space/libp2p-webrtc-qr (Le-Space/simple-todo uses it) exchanges the
+// signed WebRTC signaling out of band as QR codes, so two devices in one room
+// need no relay at all. Not wired in yet.
+//
 // Its key is derived from the passkey's PRF answer (database-keys.js,
 // `derivePeerKeySeed`), so the peer id a paired app knows stays the same from
 // one unlock to the next and on every device the passkey is synced to. It is
