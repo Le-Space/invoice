@@ -70,9 +70,10 @@ export function ucepLibp2pConfig({ privateKey, relays }) {
 		streamMuxers: [yamux()],
 		connectionManager: {
 			// Every connection a paired app opens through the relay comes from
-			// the relay's address, and libp2p opens a new one for each call as
-			// long as the old one is relayed; the default of five per second
-			// from one address refused the sixth.
+			// the relay's address. @le-space/ucep from 0.2.0-draft.1 reuses its
+			// relayed connection, which keeps it far below libp2p's default of
+			// five a second; the margin is for consumers on 0.2.0-draft.0, which
+			// opened one per call and were refused from the sixth.
 			inboundConnectionThreshold: 100
 		},
 		// A browser does not dial private addresses by default; the specs'
