@@ -58,8 +58,8 @@ importers:
         specifier: 0.8.0
         version: 0.8.0(@orbitdb/core@4.0.0)
       '@le-space/ucep':
-        specifier: 0.2.0-draft.0
-        version: 0.2.0-draft.0
+        specifier: 0.2.0-draft.1
+        version: 0.2.0-draft.1
       '@libp2p/circuit-relay-v2':
         specifier: 4.2.9
         version: 4.2.9
@@ -817,8 +817,8 @@ packages:
   '@le-space/ucanto-principal@9.1.2':
     resolution: {integrity: sha512-vWRXFPLKQwfC7CXhgrl3p11cOgEWHcgQyosR4EztgKfHmKAbYOn2y7VQpr4pEtJHw/iB92EJSyJBGYecTmF/2g==}
 
-  '@le-space/ucep@0.2.0-draft.0':
-    resolution: {integrity: sha512-O8AMZnEgWQxjCkHJHSxDXuKGSrLVP/nj6cu7AIYbZj8tMsfO6NYHOyJADd6EaAaF4CIUEmTT3s0z6xHLCHKBsw==}
+  '@le-space/ucep@0.2.0-draft.1':
+    resolution: {integrity: sha512-oHaVtyKGXMt/PMfcJldtmJjwyMWVMZyAQjIjZrbrpM53SDoUm2hFCqwliq+2hU/jdRAfmZiogztAo2e9GKXcfA==}
     engines: {node: '>=22'}
 
   '@leichtgewicht/ip-codec@2.0.5':
@@ -5012,7 +5012,7 @@ snapshots:
       multiformats: 13.4.2
       one-webcrypto: 1.0.3
 
-  '@le-space/ucep@0.2.0-draft.0':
+  '@le-space/ucep@0.2.0-draft.1':
     dependencies:
       '@libp2p/interface': 3.3.0
       '@libp2p/peer-id': 6.0.15
