@@ -3,8 +3,9 @@
 	// QR code or to copy, or a short window in which an app may ask in-band —
 	// then the same six digits on both screens, and this human says yes.
 	import { renderSVG } from 'uqr';
-	import { t } from '$lib/i18n/index.js';
-	import { app, currentProvider, startUcep } from '$lib/session.svelte.js';
+	import { list, t } from '$lib/i18n/index.js';
+	import { app, currentProvider, currentUcep, startUcep } from '$lib/session.svelte.js';
+	import { invitationAddrs } from '$lib/ucep/net.js';
 	import { SCOPES } from '$lib/ucep/provider.js';
 
 	let offer = $state({ [SCOPES.eigenbeleg]: true, [SCOPES.read]: true });
@@ -24,7 +25,12 @@
 			.filter(([, on]) => on)
 			.map(([scope]) => scope);
 		try {
-			invitation = await currentProvider()?.createInvitation({ scopes });
+			const ucep = currentUcep();
+			invitation = await currentProvider()?.createInvitation({
+				scopes,
+				// Only this app through its relays: a short link, a sparse QR code.
+				...(ucep ? { addrs: invitationAddrs(ucep.node, ucep.relays) } : {})
+			});
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		}
@@ -211,6 +217,19 @@
 	</div>
 
 	{#if error}<p class="text-sm text-danger" role="alert">{error}</p>{/if}
+
+	<details class={box} open={app.ucep.status === 'off'} data-testid="ucep-privacy">
+		<summary class="cursor-pointer {heading}">{t('ucep.pairing.privacy.heading')}</summary>
+		<ul class="mt-2 list-disc space-y-1.5 pl-5 text-sm text-text">
+			{#each list('ucep.pairing.privacy.points') as point, i (i)}
+				<li>
+					{#each point.split(/\*\*(.+?)\*\*/) as part, j (j)}{#if j % 2 === 1}<strong
+								class="text-heading">{part}</strong
+							>{:else}{part}{/if}{/each}
+				</li>
+			{/each}
+		</ul>
+	</details>
 
 	<div class={box}>
 		<h2 class={heading}>{t('ucep.pairing.grantsHeading')}</h2>

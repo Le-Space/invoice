@@ -29,7 +29,7 @@ export default {
 			copied: 'Kopiert',
 			start: 'Verbindung aufbauen',
 			offHint:
-				'Erst wenn du hier klickst, verbindet sich die App mit dem Relay; danach nur, solange eine App gekoppelt ist. Das Relay sieht die IP-Adresse dieses Geräts, deine Rechnungen nicht.',
+				'Erst wenn du hier klickst, geht die App ins Netz; danach nur, solange eine App gekoppelt ist. Was dabei wer sieht, steht unten unter „Datenschutz und Sicherheit“.',
 			starting: 'Verbindung wird aufgebaut …',
 			failed: 'Die Verbindung konnte nicht aufgebaut werden:',
 			invitationHeading: 'Einladung',
@@ -48,6 +48,18 @@ export default {
 			approve: 'Zustimmen',
 			deny: 'Ablehnen',
 			codeWrong: 'Der Code stimmt nicht mit dem der anderen App überein.',
+			privacy: {
+				heading: 'Datenschutz und Sicherheit',
+				points: [
+					'**Auf diesem Gerät:** Rechnungen, Kunden, Eigenbelege und Kopplungen sind verschlüsselt gespeichert (AES-GCM), mit einem Schlüssel, der bei jedem Entsperren aus deinem Passkey abgeleitet und nie gespeichert wird. Ohne den Passkey kann sie niemand lesen – auch wir nicht.',
+					'**Wann die App ins Netz geht:** nur nach „Verbindung aufbauen“, und danach nur, solange eine App gekoppelt ist. Deine Rechnungen werden dabei nie übertragen; die Datenbanken bleiben auf diesem Gerät.',
+					'**Welches Relay:** Die App fragt api.aleph.im nach den aktuellen Adressen der Le-Space-Relays und nimmt nur Einträge der beiden Le-Space-Wallets an. Aleph sieht dabei die IP-Adresse dieses Geräts.',
+					'**Was das Relay sieht:** die IP-Adresse dieses Geräts und der gekoppelten App, beider Peer-IDs, wann sie verbunden sind und wie viele Bytes fließen. Nicht den Inhalt: Jede Verbindung ist Ende zu Ende verschlüsselt (Noise), und das Relay kann sich nicht als diese App ausgeben.',
+					'**Direkte Verbindung:** Damit das PDF direkt fließt, handeln die beiden Geräte WebRTC aus und fragen dafür öffentliche STUN-Server (Google, Twilio, Cloudflare, Mozilla) nach ihrer öffentlichen Adresse. Diese Server sehen die IP-Adresse, keine Inhalte.',
+					'**Was eine gekoppelte App bekommt:** nur, was ihre Rechte erlauben – Eigenbelege erstellen und die eigenen wieder lesen. Nie deine Rechnungen, Kunden oder die Eigenbelege anderer Apps. „Entkoppeln“ widerruft das sofort.',
+					'**Deine Peer-ID** kommt aus deinem Passkey und bleibt gleich, damit gekoppelte Apps dich wiederfinden. Wer sie kennt, kann darüber Verbindungen dieser App wiedererkennen.'
+				]
+			},
 			grantsHeading: 'Gekoppelte Apps',
 			noGrants: 'Noch keine App gekoppelt.',
 			since: 'seit {when}',

@@ -26,28 +26,149 @@ import { webSockets } from '@libp2p/websockets';
 import { webRTC } from '@libp2p/webrtc';
 import { circuitRelayTransport } from '@libp2p/circuit-relay-v2';
 import { generateKeyPairFromSeed } from '@libp2p/crypto/keys';
+import { FaultTolerance } from '@libp2p/interface';
 
 /**
- * The relay Le-Space/simple-todo uses (its `.env.example`,
- * VITE_RELAY_BOOTSTRAP_ADDR_PROD). Another one is set with VITE_RELAY_ADDRS,
- * comma-separated.
+ * Where the relays come from: the Le-Space relays register their current
+ * addresses on Aleph (Le-Space/relay-button, @le-space/aleph-bootstrap), as
+ * POST messages in the channel `simple-todo` under the ref
+ * `simple-todo-bootstrap`. Anybody can post there, so only the wallets that
+ * run the Le-Space relays count (Nico's choice, 2026-09-28), and only their
+ * orbitdb-relay registration, newest first.
+ *
+ * Trusting a relay is about metadata and availability, not about content:
+ * every connection through it is encrypted end to end (Noise), and a relay
+ * cannot pose as the app (Noise checks the peer id, the invitation names it).
+ * A stranger's relay could still see who connects when, or refuse to relay.
  */
-export const DEFAULT_RELAYS = Object.freeze([
-	'/dns4/pill-execute-neither-suspect.2n6.me/tcp/443/tls/ws/p2p/12D3KooWSc3Sqr3Q7RGJAFBz5i7WTTC5kzunnm2tvXVcSwTEtUTP'
+export const ALEPH_API = 'https://api.aleph.im';
+export const RELAY_REGISTRATION = Object.freeze({
+	channel: 'simple-todo',
+	ref: 'simple-todo-bootstrap',
+	type: 'relay-bootstrap-v2',
+	registrationId: 'relay:orbitdb-relay:orbitdb-relay'
+});
+export const TRUSTED_RELAY_SENDERS = Object.freeze([
+	'0xc1B96D694a6A7CBae0cEab5116fF996b2547479b',
+	'0x28BbF08A50eB88253cDc25Fe36eE345Dd7937cC6'
 ]);
 
 /**
- * The relays to use: the configured ones, else the default.
+ * The relays as they were registered on 2026-09-28, for when Aleph cannot be
+ * asked. A relay moves when it is redeployed; the lookup is what keeps up.
+ */
+export const FALLBACK_RELAYS = Object.freeze([
+	'/dns4/improve-empty-grass-tent.2n6.me/tcp/443/tls/ws/p2p/12D3KooWL9UKRwGWE6GGxANhDZpJNyDphQcfBSApuXE1qTW5pkVh',
+	'/dns4/job-blanket-biology-typical.2n6.me/tcp/443/tls/ws/p2p/12D3KooWSEfBQ6yJ19ebpoWvx1T5yWL3UtjkN1muJJ4djyTfPtsZ'
+]);
+
+/**
+ * A relay address a browser on an https page can dial: a TLS WebSocket by
+ * name, with the relay's peer id.
  *
- * @param {string | undefined} [configured] comma-separated multiaddrs
+ * @param {string} addr
+ */
+export const browserDialable = (addr) =>
+	/^\/dns[46]?\/[^/]+\/tcp\/\d+\/(tls\/ws|wss)\/p2p\/[1-9A-HJ-NP-Za-km-z]+$/.test(addr);
+
+/**
+ * The trusted relays' current addresses, from the Aleph posts: the newest
+ * orbitdb-relay registration of each trusted wallet, one browser-dialable
+ * address per relay (IPv4 by name first).
+ *
+ * @param {any} payload the answer of `/api/v0/posts.json`
+ * @param {readonly string[]} [senders]
  * @returns {string[]}
  */
-export function relayAddrs(configured = import.meta.env?.VITE_RELAY_ADDRS) {
+export function relaysFromPosts(payload, senders = TRUSTED_RELAY_SENDERS) {
+	const trusted = new Set(senders.map((s) => s.toLowerCase()));
+	/** @type {Map<string, { time: number, addrs: string[] }>} */
+	const newest = new Map();
+	for (const post of Array.isArray(payload?.posts) ? payload.posts : []) {
+		const sender = String(post?.sender ?? '').toLowerCase();
+		if (!trusted.has(sender)) continue;
+		let content = post?.content;
+		if (!content && typeof post?.item_content === 'string') {
+			try {
+				content = JSON.parse(post.item_content)?.content;
+			} catch {
+				continue;
+			}
+		}
+		if (content?.registrationId !== RELAY_REGISTRATION.registrationId) continue;
+		const time = Number(post?.time ?? 0);
+		const addrs = (Array.isArray(content?.multiaddrs) ? content.multiaddrs : [])
+			.map(String)
+			.filter(browserDialable)
+			.sort(
+				(/** @type {string} */ a, /** @type {string} */ b) =>
+					Number(b.startsWith('/dns4/')) - Number(a.startsWith('/dns4/'))
+			);
+		if (addrs.length === 0) continue;
+		if ((newest.get(sender)?.time ?? -1) < time) newest.set(sender, { time, addrs });
+	}
+	return [...newest.values()].sort((a, b) => b.time - a.time).map((entry) => entry.addrs[0]);
+}
+
+/**
+ * The relays to use: the configured ones (VITE_RELAY_ADDRS, comma-separated;
+ * the browser specs set it), else the trusted relays as Aleph knows them now,
+ * else the fallback.
+ *
+ * @param {{ configured?: string, fetch?: typeof fetch, timeoutMs?: number }} [options]
+ * @returns {Promise<string[]>}
+ */
+export async function relayAddrs({
+	configured = import.meta.env?.VITE_RELAY_ADDRS,
+	fetch: fetchImpl = globalThis.fetch,
+	timeoutMs = 5000
+} = {}) {
 	const list = String(configured ?? '')
 		.split(',')
 		.map((addr) => addr.trim())
 		.filter(Boolean);
-	return list.length > 0 ? list : [...DEFAULT_RELAYS];
+	if (list.length > 0) return list;
+	try {
+		const url = new URL('/api/v0/posts.json', ALEPH_API);
+		url.searchParams.set('channels', RELAY_REGISTRATION.channel);
+		url.searchParams.set('refs', RELAY_REGISTRATION.ref);
+		url.searchParams.set('types', RELAY_REGISTRATION.type);
+		url.searchParams.set('addresses', TRUSTED_RELAY_SENDERS.join(','));
+		url.searchParams.set('pagination', '20');
+		const response = await fetchImpl(url, {
+			signal: AbortSignal.timeout(timeoutMs),
+			cache: 'no-cache'
+		});
+		if (response.ok) {
+			const found = relaysFromPosts(await response.json());
+			if (found.length > 0) return found;
+		}
+	} catch {
+		// Aleph not reachable: the relays as they were last known.
+	}
+	return [...FALLBACK_RELAYS];
+}
+
+/**
+ * The addresses an invitation carries: this node through each of its relays
+ * (and WebRTC through them), not the dozens of private addresses a relay also
+ * reports, which make the QR code dense and help nobody outside its network.
+ *
+ * @param {any} node
+ * @param {string[]} relays
+ */
+export function invitationAddrs(node, relays) {
+	const self = node.peerId.toString();
+	const wanted = new Set(
+		relays.flatMap((relay) => [
+			`${relay}/p2p-circuit/p2p/${self}`,
+			`${relay}/p2p-circuit/webrtc/p2p/${self}`
+		])
+	);
+	return node
+		.getMultiaddrs()
+		.map(String)
+		.filter((/** @type {string} */ addr) => wanted.has(addr));
 }
 
 /** A relay on this machine, as the browser specs start one. @param {string} addr */
@@ -66,6 +187,8 @@ export function ucepLibp2pConfig({ privateKey, relays }) {
 			listen: [...relays.map((relay) => `${relay}/p2p-circuit`), '/webrtc']
 		},
 		transports: [webSockets(), webRTC(), circuitRelayTransport()],
+		// A relay that is down must not keep the node from starting on the others.
+		transportManager: { faultTolerance: FaultTolerance.NO_FATAL },
 		connectionEncrypters: [noise()],
 		streamMuxers: [yamux()],
 		connectionManager: {
@@ -88,9 +211,9 @@ export function ucepLibp2pConfig({ privateKey, relays }) {
 /**
  * Start the node on the key derived from the passkey.
  *
- * @param {{ seed: Uint8Array, relays?: string[] }} params
+ * @param {{ seed: Uint8Array, relays: string[] }} params from `relayAddrs`
  */
-export async function startUcepNode({ seed, relays = relayAddrs() }) {
+export async function startUcepNode({ seed, relays }) {
 	const privateKey = await generateKeyPairFromSeed('Ed25519', seed);
 	return createLibp2p(ucepLibp2pConfig({ privateKey, relays }));
 }

@@ -86,7 +86,8 @@ and is published here under MIT.
 
 - Connections: the app serves the UCEP `invoice` extension
   ([Le-Space/ucep-spec](https://github.com/Le-Space/ucep-spec)) through a
-  relay (`VITE_RELAY_ADDRS`, by default the Le-Space relay simple-todo uses).
+  relay: the Le-Space relays as their two wallets register them on Aleph
+  (`VITE_RELAY_ADDRS` overrides; a fallback list when Aleph cannot be asked).
   An app paired by invitation (link or QR code) or by a six-digit code asks
   for an Eigenbeleg (`create-eigenbeleg`), its state (`status`) and its PDF
   (`get-pdf`); a stranger gets `help` and nothing else. The peer id is derived
