@@ -38,7 +38,7 @@ export default {
 			failed: 'Die Verbindung konnte nicht aufgebaut werden:',
 			invitationHeading: 'Einladung',
 			invitationHint:
-				'Zeig den QR-Code oder gib den Link weiter. Wer ihn hat, kann sich einmal koppeln – mit den Rechten, die du hier anbietest. Er gilt zehn Minuten.',
+				'Zeig den QR-Code oder gib den Link weiter. Wer ihn nutzt, erscheint unten unter den Anfragen: Die andere App zeigt sechs Ziffern, du tippst sie hier ein und stimmst zu – erst dann ist sie gekoppelt, mit den Rechten, die du hier anbietest. Der Link gilt zehn Minuten und nur für eine Kopplung.',
 			invite: 'Einladung erstellen',
 			qr: 'QR-Code der Einladung',
 			expires: 'Gültig bis {when}',

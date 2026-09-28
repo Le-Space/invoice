@@ -11,6 +11,7 @@ import { createConsumer } from '@le-space/ucep';
 import { t } from '../i18n/index.js';
 import { cancellationFor, emptyDraft, emptyLine, issue } from '@le-space/invoice/records';
 import { SCOPES, createInvoiceProvider, eigenbelegFile } from './provider.js';
+import { collectionKeyValue } from './store.js';
 
 /** A collection that keeps records in memory, the way store/repository.js does. */
 function memoryCollection() {
@@ -84,6 +85,8 @@ beforeAll(async () => {
 	]);
 	provider = createInvoiceProvider({
 		libp2p: providerNode,
+		// Confirming by code is the app's default; e2e/ucep.spec.js walks through it.
+		confirmInvitations: false,
 		store: /** @type {any} */ (store),
 		settings: () => settings,
 		t,
@@ -547,5 +550,53 @@ describe('issued invoices and their payments (0.2.0)', () => {
 		await expect(
 			provider.createInvitation({ scopes: [SCOPES.issuedRead, SCOPES.paymentRecord] })
 		).resolves.toMatchObject({ uri: expect.stringMatching(/^web\+ucep:pair\?/) });
+	});
+});
+
+describe('an invitation the app’s human confirms', () => {
+	it('pairs once the code the other app shows is typed in', async () => {
+		const [appNode, otherNode] = await Promise.all([node('confirming'), node('other')]);
+		try {
+			const confirming = createInvoiceProvider({
+				libp2p: appNode,
+				store: /** @type {any} */ ({ invoices: memoryCollection(), settings: memoryCollection() }),
+				settings: () => settings,
+				t
+			});
+			await confirming.start();
+			/** @type {any} */ let pending = null;
+			confirming.events.addEventListener(
+				'pairing:pending',
+				(/** @type {any} */ e) => (pending = e.detail)
+			);
+			const other = createConsumer({ libp2p: otherNode, label: 'Belege, Telefon' });
+			await other.start();
+			const { uri } = await confirming.createInvitation({ scopes: [SCOPES.read] });
+			/** @type {any} */ let shown = null;
+			const pairing = other.pairWithInvitation(uri, {
+				onCode: (/** @type {string} */ c) => (shown = c)
+			});
+			await expect.poll(() => pending !== null && shown !== null).toBe(true);
+			expect(shown).toBe(pending.sas);
+			await confirming.approve(pending.id, { code: shown });
+			expect((await pairing).scopes).toEqual([SCOPES.read]);
+			expect((await confirming.grants()).map((g) => g.label)).toEqual(['Belege, Telefon']);
+		} finally {
+			await Promise.all([appNode.stop(), otherNode.stop()]);
+		}
+	});
+});
+
+describe('the grant and invitation store', () => {
+	it('drops fields that are undefined: the sealed log cannot store them', async () => {
+		const settings = memoryCollection();
+		const invitations = collectionKeyValue(/** @type {any} */ (settings), 'ucep/invitation/');
+		await invitations.set('i', {
+			invitationId: 'i',
+			decision: 'approved',
+			approvedScopes: undefined
+		});
+		const [stored] = await settings.list();
+		expect(Object.keys(stored.value)).toEqual(['invitationId', 'decision']);
 	});
 });

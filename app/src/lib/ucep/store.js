@@ -22,6 +22,9 @@ export function collectionKeyValue(collection, prefix) {
 			return (await find(key))?.value ?? undefined;
 		},
 		async set(key, value) {
+			// The sealed log stores dag-cbor, which has no `undefined`: a field the
+			// library left undefined (approve without fewer scopes) is dropped.
+			value = JSON.parse(JSON.stringify(value));
 			const record = await find(key);
 			await collection.put({ ...(record ?? {}), key: `${prefix}${key}`, value });
 		},

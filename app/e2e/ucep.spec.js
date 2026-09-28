@@ -77,7 +77,18 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 		nodes.push(belegeNode);
 		const belege = createConsumer({ libp2p: belegeNode, label: 'Belege E2E' });
 		await belege.start();
-		await belege.pairWithInvitation(uri);
+		// The app's human confirms: the same six digits on both sides.
+		/** @type {string} */
+		let belegeCode = '';
+		const pairedBelege = belege.pairWithInvitation(uri, {
+			onCode: (/** @type {string} */ code) => (belegeCode = code)
+		});
+		const asking = page.getByTestId('pending-pairing').filter({ hasText: 'Belege E2E' });
+		await expect(asking).toBeVisible();
+		await expect.poll(() => belegeCode).toMatch(/^\d{6}$/);
+		await asking.getByTestId('pairing-code').fill(belegeCode);
+		await asking.getByTestId('approve-pairing').click();
+		await pairedBelege;
 		await expect(page.getByTestId('grant').filter({ hasText: 'Belege E2E' })).toBeVisible();
 
 		const created = await belege.call(providerId, 'invoice', 'create-eigenbeleg', args);

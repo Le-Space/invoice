@@ -481,13 +481,24 @@ export function invoiceCommands({ store, settings, t, now = () => new Date(), gr
  *   store: { invoices: import('../store/repository.js').Collection, settings: import('../store/repository.js').Collection },
  *   settings: () => any,
  *   t: (key: string) => string,
- *   now?: () => Date
+ *   now?: () => Date,
+ *   confirmInvitations?: boolean
  * }} deps
  */
-export function createInvoiceProvider({ libp2p, store, settings, t, now }) {
+export function createInvoiceProvider({
+	libp2p,
+	store,
+	settings,
+	t,
+	now,
+	confirmInvitations = true
+}) {
 	const grants = collectionKeyValue(store.settings, 'ucep/grant/');
 	return createProvider({
 		libp2p,
+		// A link or QR code can be passed on further than meant: whoever uses it
+		// waits until this app's human has compared the six digits and said yes.
+		confirmInvitations,
 		manifest: invoiceManifest(t),
 		commands: invoiceCommands({ store, settings, t, now, grants }),
 		store: {
