@@ -70,7 +70,10 @@ export function emptyIssuer(values = {}) {
  *   circles: Record<string, import('./numbering.js').NumberCircle>,
  *   taxMode: import('./records.js').TaxMode,
  *   paymentTermsDays: number,
- *   template: string
+ *   template: string,
+ *   units: string[],
+ *   defaultUnit: string,
+ *   cryptoUnit: string
  * }}
  */
 export function defaultInvoiceSettings(identityId) {
@@ -86,8 +89,50 @@ export function defaultInvoiceSettings(identityId) {
 		paymentTermsDays: 14,
 		// The wording of the letter, as Markdown. Empty means "whatever this
 		// reader's language says by default", which the app fills in.
-		template: ''
+		template: '',
+		// The units a line may be counted in, as the person keeps them; a new
+		// line gets `defaultUnit`, a crypto line `cryptoUnit`.
+		units: [...DEFAULT_UNITS],
+		defaultUnit: 'Stück',
+		cryptoUnit: 'Pauschale'
 	};
+}
+
+/** The units a new list starts with. */
+export const DEFAULT_UNITS = Object.freeze(['Stück', 'Stunde', 'Tag', 'Monat', 'Pauschale']);
+/** How long a unit may be, and how many there may be. */
+export const UNIT_MAX_LENGTH = 30;
+export const UNITS_MAX = 50;
+
+/**
+ * The units as they are kept: trimmed, none empty, none twice (whatever the
+ * case), none longer than `UNIT_MAX_LENGTH`; the defaults when none is left.
+ *
+ * @param {unknown} units
+ * @returns {string[]}
+ */
+export function normaliseUnits(units) {
+	/** @type {string[]} */
+	const kept = [];
+	for (const unit of Array.isArray(units) ? units : []) {
+		const name = String(unit ?? '').trim();
+		if (!name || name.length > UNIT_MAX_LENGTH) continue;
+		if (kept.some((k) => k.toLowerCase() === name.toLowerCase())) continue;
+		kept.push(name);
+		if (kept.length >= UNITS_MAX) break;
+	}
+	return kept.length > 0 ? kept : [...DEFAULT_UNITS];
+}
+
+/**
+ * @param {unknown} wanted
+ * @param {string[]} units
+ * @param {string} fallback
+ */
+function unitAmong(wanted, units, fallback) {
+	const name = String(wanted ?? '').trim();
+	if (units.includes(name)) return name;
+	return units.includes(fallback) ? fallback : units[0];
 }
 
 /**
@@ -118,7 +163,15 @@ export function normaliseInvoiceSettings(stored, identityId) {
 		paymentTermsDays: Number.isInteger(value.paymentTermsDays)
 			? value.paymentTermsDays
 			: defaults.paymentTermsDays,
-		template: typeof value.template === 'string' ? value.template : defaults.template
+		template: typeof value.template === 'string' ? value.template : defaults.template,
+		...(() => {
+			const units = value.units === undefined ? defaults.units : normaliseUnits(value.units);
+			return {
+				units,
+				defaultUnit: unitAmong(value.defaultUnit, units, defaults.defaultUnit),
+				cryptoUnit: unitAmong(value.cryptoUnit, units, defaults.cryptoUnit)
+			};
+		})()
 	};
 }
 

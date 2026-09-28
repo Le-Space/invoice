@@ -43,6 +43,13 @@ export async function createDraft(store, settings, { templateId = null, language
 		...emptyDraft({ taxMode: settings?.taxMode ?? 'standard' }),
 		paymentTermsDays: settings?.paymentTermsDays ?? 14
 	};
+	// The first line in the unit the settings name for new lines.
+	if (settings?.defaultUnit) {
+		draft.lines = draft.lines.map((/** @type {any} */ line) => ({
+			...line,
+			unit: settings.defaultUnit
+		}));
+	}
 	if (templateId) draft = applyChainTemplate(draft, templateId, { language });
 	return store.invoices.put({ ...forStore(draft), chainTemplate: templateId });
 }

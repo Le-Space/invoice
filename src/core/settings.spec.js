@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+	DEFAULT_UNITS,
 	circleOf,
 	defaultInvoiceSettings,
+	emptyIssuer,
 	isInvoiceSettingsKey,
 	nextNumberFor,
-	emptyIssuer,
-	normaliseInvoiceSettings
+	normaliseInvoiceSettings,
+	normaliseUnits
 } from './settings.js';
 import { seriesDigits } from './series.js';
 
@@ -98,5 +100,36 @@ describe('nextNumberFor', () => {
 		expect(nextNumberFor(settings, ALICE, issued, on('2026-09-24'))).toBe(
 			`2026-${seriesDigits(ALICE)}-003`
 		);
+	});
+});
+
+describe('units', () => {
+	it('start as the defaults, with Stück for new lines and Pauschale for crypto lines', () => {
+		const settings = normaliseInvoiceSettings({}, 'did:key:zTest');
+		expect(settings.units).toEqual([...DEFAULT_UNITS]);
+		expect(settings.defaultUnit).toBe('Stück');
+		expect(settings.cryptoUnit).toBe('Pauschale');
+	});
+
+	it('are kept as the person keeps them: trimmed, once each, none empty or too long', () => {
+		expect(normaliseUnits([' Lizenz ', 'lizenz', '', 'Stunde', 'x'.repeat(31), 'GB'])).toEqual([
+			'Lizenz',
+			'Stunde',
+			'GB'
+		]);
+		expect(normaliseUnits([])).toEqual([...DEFAULT_UNITS]);
+		expect(normaliseUnits('Stück')).toEqual([...DEFAULT_UNITS]);
+	});
+
+	it('keep the defaults for lines among them, or fall back', () => {
+		const own = normaliseInvoiceSettings(
+			{ units: ['Lizenz', 'Monat'], defaultUnit: 'Lizenz', cryptoUnit: 'Stück' },
+			'did:key:zTest'
+		);
+		expect(own).toMatchObject({
+			units: ['Lizenz', 'Monat'],
+			defaultUnit: 'Lizenz',
+			cryptoUnit: 'Lizenz'
+		});
 	});
 });
