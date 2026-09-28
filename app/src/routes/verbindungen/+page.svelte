@@ -6,9 +6,15 @@
 	import { list, t } from '$lib/i18n/index.js';
 	import { app, currentProvider, currentUcep, startUcep } from '$lib/session.svelte.js';
 	import { invitationAddrs } from '$lib/ucep/net.js';
-	import { SCOPES } from '$lib/ucep/provider.js';
+	import { SCOPE_TEXT } from '$lib/ucep/scopes.js';
 
-	let offer = $state({ [SCOPES.eigenbeleg]: true, [SCOPES.read]: true });
+	// Every scope is offered unless the human unticks it: Belege asks for all
+	// of them, and an invitation that lacks one it asks for is refused.
+	let offer = $state(
+		/** @type {Record<string, boolean>} */ (
+			Object.fromEntries(Object.keys(SCOPE_TEXT).map((scope) => [scope, true]))
+		)
+	);
 	let invitation = $state(/** @type {{ uri: string, expiresAt: number } | null} */ (null));
 	let windowUntil = $state(0);
 	/** @type {Record<string, string>} what the human typed per pending pairing */
@@ -122,14 +128,16 @@
 	<div class={box}>
 		<h2 class={heading}>{t('ucep.pairing.invitationHeading')}</h2>
 		<p class="text-xs text-faint">{t('ucep.pairing.invitationHint')}</p>
-		{#each [SCOPES.eigenbeleg, SCOPES.read] as scope (scope)}
+		{#each Object.entries(SCOPE_TEXT) as [scope, text] (scope)}
 			<label class="flex items-start gap-2 text-sm">
-				<input type="checkbox" bind:checked={offer[scope]} class="mt-0.5" />
-				<span
-					><code class="text-xs">{scope}</code> – {t(
-						scope === SCOPES.read ? 'ucep.scopes.read' : 'ucep.scopes.eigenbeleg'
-					)}</span
-				>
+				<input
+					type="checkbox"
+					bind:checked={offer[scope]}
+					class="mt-0.5"
+					data-testid="offer-scope"
+					data-scope={scope}
+				/>
+				<span><code class="text-xs">{scope}</code> – {t(text)}</span>
 			</label>
 		{/each}
 		<button

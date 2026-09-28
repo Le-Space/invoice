@@ -1,7 +1,9 @@
 // The invoice app as a UCEP provider, reached through a relay the way Belege
 // will reach it: an app paired by invitation gets an Eigenbeleg, a stranger
 // gets nothing, an app paired by code comes through the human's yes, and an
-// unpaired app is refused again. The peer id stays over a reload.
+// unpaired app is refused again. The peer id stays over a reload. Since 0.2.0
+// the paired app also reads an issued invoice and reports it paid, and the
+// invoice list says so.
 import { test, expect } from '@playwright/test';
 import { createConsumer } from '@le-space/ucep';
 import { addVirtualAuthenticator } from './webauthn.js';
@@ -60,6 +62,13 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 		await page.getByTestId('create-invitation').click();
 		const uri = await page.getByTestId('invitation-uri').inputValue();
 		expect(uri).toMatch(/^web\+ucep:pair\?/);
+		// Every scope is offered, the ones of 0.2.0 too.
+		expect(parseInvitation(uri).scopes).toEqual([
+			'invoice:eigenbeleg:create',
+			'invoice:document:read',
+			'invoice:issued:read',
+			'invoice:payment:record'
+		]);
 		// Only the app through its relay: no private addresses, a sparse QR code.
 		const offered = parseInvitation(uri).addrs;
 		expect(offered.length).toBeGreaterThan(0);
@@ -98,6 +107,39 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 			page.getByTestId('download-pdf').click()
 		]);
 		expect(download.suggestedFilename()).toBe(`Eigenbeleg-${created.number}.pdf`);
+
+		// An invoice issued here: Belege lists it, and reports it paid.
+		await page.getByRole('link', { name: 'Rechnungen', exact: true }).click();
+		await page.getByTestId('new-invoice').click();
+		await page.getByTestId('customer-name').fill('Beispiel Kunde GmbH');
+		await page.getByTestId('customer-address').fill('Beispielweg 2\n54321 Beispielstadt');
+		await page.getByTestId('line-description').fill('Beratung');
+		await page.getByTestId('line-price').fill('100');
+		page.once('dialog', (dialog) => dialog.accept());
+		await page.getByTestId('issue').click();
+		await expect(page.getByTestId('payment-status')).toHaveAttribute('data-status', 'open');
+		const listed = await belege.call(providerId, 'invoice', 'list-issued', {});
+		expect(listed.invoices).toHaveLength(1);
+		const [invoice] = listed.invoices;
+		expect(invoice).toMatchObject({
+			state: 'issued',
+			customer: { name: 'Beispiel Kunde GmbH' },
+			total: { value: '119.00', currency: 'EUR' },
+			payments: []
+		});
+		const paid = await belege.call(providerId, 'invoice', 'record-payment', {
+			documentId: invoice.documentId,
+			paidOn: invoice.issuedOn,
+			amount: { value: '119.00', currency: 'EUR' },
+			reference: { system: 'belege', id: '01J0000000000000000000000D' }
+		});
+		expect(paid).toMatchObject({ state: 'paid', open: { value: '0.00' } });
+		await expect(page.getByTestId('payment-status')).toHaveAttribute('data-status', 'paid');
+		await expect(page.getByTestId('payment')).toContainText('gemeldet von Belege E2E');
+		await page.getByRole('link', { name: 'Rechnungen', exact: true }).click();
+		await expect(page.getByTestId('invoice-row').filter({ hasText: invoice.number })).toContainText(
+			'bezahlt am'
+		);
 
 		// Sealed at rest: nothing of the pairing or the Eigenbeleg is readable on disk.
 		{

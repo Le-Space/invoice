@@ -25,7 +25,9 @@
 	} from '@le-space/invoice/eigenbeleg-pdf';
 	import { t } from '$lib/i18n/index.js';
 	import { app, currentStore } from '$lib/session.svelte.js';
-	import { draftCancellation, issueDraft, saveDraft } from '$lib/invoices.js';
+	import { draftCancellation, issueDraft, paymentOf, saveDraft, today } from '$lib/invoices.js';
+	import { dueOn } from '@le-space/invoice/payments';
+	import PaymentBadge from '$lib/PaymentBadge.svelte';
 
 	let id = $derived(page.params.id);
 	let stored = $derived(app.invoices.find((invoice) => invoice.id === id) ?? null);
@@ -68,6 +70,9 @@
 		}
 	});
 	let networks = $derived(draft ? (CURRENCY_NETWORKS[draft.currency] ?? []) : []);
+	let payment = $derived(issued && !eigenbeleg ? paymentOf(stored, today()) : null);
+	/** The payments another app reported, as stored (they change while the invoice does not). */
+	let payments = $derived(/** @type {any[]} */ (stored?.payments ?? []));
 
 	/** An invoice not in euros asks for the rate its VAT is converted at. */
 	function ensureRate() {
@@ -218,6 +223,7 @@
 	<section class="mt-4 space-y-4" data-testid="issued-invoice">
 		<h1 class="text-lg font-semibold text-heading">
 			{t('invoice.app.editor.issuedHeading', { number: stored.number })}
+			<PaymentBadge invoice={stored} />
 		</h1>
 		{#if stored.cancelledBy}
 			<p class="text-sm text-danger" data-testid="cancelled-by">
@@ -245,7 +251,51 @@
 					{totals ? formatMoney(totals.due, unit) : '—'}
 				</dd>
 			</div>
+			{#if payment}
+				<div>
+					<dt class={label}>{t('invoice.app.editor.dueOn')}</dt>
+					<dd>{formatDay(dueOn(stored)) || '—'}</dd>
+				</div>
+				<div>
+					<dt class={label}>{t('invoice.app.editor.paidSum')}</dt>
+					<dd class="font-mono" data-testid="paid-sum">{formatMoney(payment.paid, unit)}</dd>
+				</div>
+				<div>
+					<dt class={label}>{t('invoice.app.editor.openSum')}</dt>
+					<dd class="font-mono" data-testid="open-sum">
+						{formatMoney(payment.total > payment.paid ? payment.total - payment.paid : 0n, unit)}
+					</dd>
+				</div>
+			{/if}
 		</dl>
+		{#if payments.length > 0}
+			<div class="rounded-lg border border-border bg-surface p-4 text-sm" data-testid="payments">
+				<h2 class="text-sm font-medium text-heading">{t('invoice.app.editor.paymentsHeading')}</h2>
+				<ul class="mt-2 divide-y divide-border">
+					{#each payments as p (`${p.reference?.system}/${p.reference?.id}`)}
+						<li
+							class="flex flex-wrap items-baseline justify-between gap-2 py-1.5"
+							data-testid="payment"
+						>
+							<span class="text-heading"
+								>{t('invoice.app.editor.paymentLine', {
+									amount: formatMoney(p.units, unit),
+									date: formatDay(p.paidOn)
+								})}</span
+							>
+							{#if p.recordedAt}
+								<span class="text-xs text-faint"
+									>{t('invoice.app.editor.reportedBy', {
+										app: p.recordedBy?.label || t('ucep.pairing.unnamed'),
+										date: new Date(p.recordedAt).toLocaleDateString('de-DE')
+									})}</span
+								>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 		<div class="flex flex-wrap gap-2">
 			<button
 				type="button"

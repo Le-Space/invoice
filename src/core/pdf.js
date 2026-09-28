@@ -126,6 +126,14 @@ export async function invoicePdfBytes(invoice, labels, { locale = 'de-DE' } = {}
 	const pdf = await PDFDocument.create();
 	pdf.setTitle(`${model.title} ${model.number}`.trim());
 	pdf.setProducer('Le-Space invoice');
+	// An issued invoice carries the moment it was issued, not the clock's: the
+	// same invoice is the same bytes every time it is drawn, so the SHA-256 and
+	// CID that UCEP's get-pdf names for it hold.
+	const issuedAt = invoice?.issuedAt ? new Date(invoice.issuedAt) : null;
+	if (issuedAt && !Number.isNaN(issuedAt.getTime())) {
+		pdf.setCreationDate(issuedAt);
+		pdf.setModificationDate(issuedAt);
+	}
 	const { regular, bold, embedded } = await embedFonts(pdf, StandardFonts);
 	const ink = rgb(0.09, 0.09, 0.11);
 	const faint = rgb(0.45, 0.45, 0.48);
