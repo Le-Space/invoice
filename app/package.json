@@ -54,6 +54,7 @@
 		"@libp2p/crypto": "5.1.23",
 		"@libp2p/gossipsub": "16.1.0",
 		"@libp2p/identify": "4.1.10",
+		"@libp2p/interface": "3.3.0",
 		"@libp2p/webrtc": "6.0.27",
 		"@libp2p/websockets": "10.1.17",
 		"@multiformats/multiaddr": "13.0.3",

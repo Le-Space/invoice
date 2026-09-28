@@ -67,6 +67,11 @@ export function currentProvider() {
 	return ucep?.provider ?? null;
 }
 
+/** The node and its relays, for the addresses an invitation carries. */
+export function currentUcep() {
+	return ucep;
+}
+
 async function refreshGrants() {
 	if (ucep) app.ucep.grants = await ucep.provider.grants();
 }
@@ -85,7 +90,8 @@ export async function startUcep() {
 	try {
 		const { startUcepNode, relayAddrs, reachable } = await import('./ucep/net.js');
 		const { createInvoiceProvider } = await import('./ucep/provider.js');
-		const relays = relayAddrs();
+		// The trusted Le-Space relays as Aleph knows them now (ucep/net.js).
+		const relays = await relayAddrs();
 		const node = await startUcepNode({ seed: session.ucepSeed, relays });
 		const provider = createInvoiceProvider({
 			libp2p: node,

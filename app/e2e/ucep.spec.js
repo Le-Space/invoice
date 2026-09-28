@@ -6,6 +6,8 @@ import { test, expect } from '@playwright/test';
 import { createConsumer } from '@le-space/ucep';
 import { addVirtualAuthenticator } from './webauthn.js';
 import { relayAddr, startConsumerNode } from './relay.js';
+import { everythingStoredAsText, spellings } from './storage-scan.js';
+import { parseInvitation } from '@le-space/ucep';
 
 /** The spec's example (extensions/invoice.md), made-up data. */
 const args = {
@@ -43,6 +45,9 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 		// Not paired yet: nothing connects to the relay until asked.
 		await page.getByRole('link', { name: 'Verbindungen' }).click();
 		await expect(page.getByTestId('ucep-start')).toBeVisible();
+		// What going online means is said before anybody clicks.
+		await expect(page.getByTestId('ucep-privacy')).toContainText('Ende zu Ende verschlüsselt');
+		await expect(page.getByTestId('ucep-privacy')).toContainText('api.aleph.im');
 		await expect(page.getByTestId('ucep-peer-id')).toHaveCount(0);
 		await page.getByTestId('ucep-start').click();
 		// Then the app is reachable through the relay.
@@ -55,6 +60,10 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 		await page.getByTestId('create-invitation').click();
 		const uri = await page.getByTestId('invitation-uri').inputValue();
 		expect(uri).toMatch(/^web\+ucep:pair\?/);
+		// Only the app through its relay: no private addresses, a sparse QR code.
+		const offered = parseInvitation(uri).addrs;
+		expect(offered.length).toBeGreaterThan(0);
+		expect(offered.every((addr) => addr.startsWith(`${relay}/p2p-circuit/`))).toBe(true);
 		const belegeNode = await startConsumerNode(relay);
 		nodes.push(belegeNode);
 		const belege = createConsumer({ libp2p: belegeNode, label: 'Belege E2E' });
@@ -89,6 +98,22 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 			page.getByTestId('download-pdf').click()
 		]);
 		expect(download.suggestedFilename()).toBe(`Eigenbeleg-${created.number}.pdf`);
+
+		// Sealed at rest: nothing of the pairing or the Eigenbeleg is readable on disk.
+		{
+			const secret = Buffer.from(parseInvitation(uri).secret).toString('hex');
+			const { text } = await everythingStoredAsText(page);
+			for (const plain of [
+				'Belege E2E',
+				created.number,
+				'on-chain und stellt keine',
+				'Wolkenfabrik'
+			]) {
+				expect(text).not.toContain(plain);
+			}
+			expect(text).not.toContain(belegeNode.peerId.toString());
+			for (const form of spellings(secret)) expect(text).not.toContain(form);
+		}
 
 		// A stranger reaches the app, learns what it serves, and gets nothing.
 		const strangerNode = await startConsumerNode(relay);
