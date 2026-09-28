@@ -85,6 +85,7 @@
 			"patternYear": "A circle that restarts every year needs the year in the number — otherwise it hands out the same one twice.",
 			"patternMonth": "A circle that restarts every month needs the year and the month in the number.",
 			"currency": "The invoice does not know this currency.",
+			"currencyRetired": "No new invoice is written in this currency: there is no address for it to be paid to.",
 			"eurRate": "An invoice in another currency than euros states its VAT in euros too: the rate, its source and its date are missing.",
 			"eurRateMonth": "The rate has to be one of the month the service was rendered in (§16(6) UStG).",
 			"cryptoTransaction": "This booking is not a crypto transaction with a quantity and a rate.",

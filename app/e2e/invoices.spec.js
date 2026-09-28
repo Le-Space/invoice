@@ -1,14 +1,14 @@
-// The invoice app end to end: a passkey opens sealed books, an issuer with a
-// NYM address, an invoice from the NYM template, issued and printed, still
-// there after a reload — and nothing of it readable on disk.
+// The invoice app end to end: a passkey opens sealed books, an issuer with an
+// Ethereum address, an invoice from the USDC-on-Base template, issued and
+// printed, still there after a reload — and nothing of it readable on disk.
 import { test, expect } from '@playwright/test';
 import { addVirtualAuthenticator, recordCeremonies, takeCeremonies } from './webauthn.js';
 import { everythingStoredAsText, spellings } from './storage-scan.js';
 
-// Made-up data; the NYM address is made of zero bytes.
-const NYM = 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc';
+// Made-up data; the EVM address is made of zero bytes but the last.
+const ETH = '0x0000000000000000000000000000000000000001';
 
-test('a NYM invoice from a template, issued, printed and sealed', async ({ page }) => {
+test('a USDC invoice from a template, issued, printed and sealed', async ({ page }) => {
 	const customer = `Stromwerk Test AG ${Date.now().toString(36)}`;
 	await addVirtualAuthenticator(page);
 	await recordCeremonies(page);
@@ -27,26 +27,30 @@ test('a NYM invoice from a template, issued, printed and sealed', async ({ page 
 	]);
 	await expect(page.getByTestId('empty')).toBeVisible();
 
-	// The issuer, and an address that is not a NYM address is flagged.
+	// The issuer, and an address that is not an EVM address is flagged.
 	await page.getByRole('link', { name: 'Einstellungen' }).click();
 	await page.getByTestId('issuer-name').fill('Wolkenfabrik Hosting UG');
 	await page.getByTestId('issuer-address').fill('Musterstraße 1\n12345 Musterstadt');
-	await page.getByTestId('crypto-nym').fill('akash1qyqszqgpqyqszqgpqyqszqgpqyqszqgplgve5x');
-	await expect(page.getByTestId('crypto-nym-invalid')).toBeVisible();
-	await page.getByTestId('crypto-nym').fill(NYM);
-	await expect(page.getByTestId('crypto-nym-invalid')).toHaveCount(0);
+	await page.getByTestId('crypto-eth').fill('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4');
+	await expect(page.getByTestId('crypto-eth-invalid')).toBeVisible();
+	await page.getByTestId('crypto-eth').fill(ETH);
+	await expect(page.getByTestId('crypto-eth-invalid')).toHaveCount(0);
+	// Only Bitcoin and Ethereum addresses are published.
+	await expect(page.getByTestId('crypto-nym')).toHaveCount(0);
+	await expect(page.getByTestId('crypto-akt')).toHaveCount(0);
 	await expect(page.getByTestId('series')).toContainText('{YYYY}');
 	await page.getByTestId('save-settings').click();
 	await expect(page.getByRole('status')).toContainText('Gespeichert');
 
-	// A draft from the NYM template: currency, network and the usual line.
+	// A draft from the USDC template: currency and network.
 	await page.getByRole('link', { name: 'Rechnungen', exact: true }).click();
-	await page.getByTestId('new-template').selectOption('nym-node');
+	await expect(page.getByTestId('new-template').locator('option[value="nym-node"]')).toHaveCount(0);
+	await page.getByTestId('new-template').selectOption('usdc-base');
 	await page.getByTestId('new-invoice').click();
 	await expect(page.getByTestId('draft-editor')).toBeVisible();
-	await expect(page.getByTestId('currency')).toHaveValue('NYM');
-	await expect(page.getByTestId('network')).toHaveValue('nyx');
-	await expect(page.getByTestId('line-description')).toHaveValue('Betrieb eines Nym-Knotens');
+	await expect(page.getByTestId('currency')).toHaveValue('USDC');
+	await expect(page.getByTestId('network')).toHaveValue('base');
+	await expect(page.getByTestId('currency').locator('option[value="NYM"]')).toHaveCount(0);
 
 	// Not ready yet: the customer is missing, and the euro rate for the VAT.
 	await expect(page.getByTestId('problems')).toBeVisible();
@@ -54,20 +58,21 @@ test('a NYM invoice from a template, issued, printed and sealed', async ({ page 
 
 	await page.getByTestId('customer-name').fill(customer);
 	await page.getByTestId('customer-address').fill('Beispielweg 2\n54321 Beispielstadt');
+	await page.getByTestId('line-description').fill('Serverbetrieb');
 	await page.getByTestId('line-price').fill('12,5');
 	const delivery = await page.getByTestId('delivery-date').inputValue();
-	await page.getByTestId('rate-per-unit').fill('0,0612');
+	await page.getByTestId('rate-per-unit').fill('0,9123');
 	await page.getByTestId('rate-source').fill('CoinGecko');
 	await page.getByTestId('rate-date').fill(delivery);
 	await expect(page.getByTestId('problems')).toHaveCount(0);
-	// 12.5 NYM + 19 % = 14.875 NYM
-	await expect(page.getByTestId('draft-due')).toContainText('14,875 NYM');
+	// 12.5 USDC + 19 % = 14.875 USDC
+	await expect(page.getByTestId('draft-due')).toContainText('14,875 USDC');
 
 	page.once('dialog', (dialog) => dialog.accept());
 	await page.getByTestId('issue').click();
 	await expect(page.getByTestId('issued-invoice')).toBeVisible();
 	await expect(page.getByRole('heading')).toContainText(/Rechnung \d{4}-\d{5}-001/);
-	await expect(page.getByTestId('issued-due')).toContainText('14,875 NYM');
+	await expect(page.getByTestId('issued-due')).toContainText('14,875 USDC');
 
 	const [download] = await Promise.all([
 		page.waitForEvent('download'),
@@ -89,7 +94,7 @@ test('a NYM invoice from a template, issued, printed and sealed', async ({ page 
 	const secrets = await page.evaluate(() => /** @type {any} */ (window).__invoiceE2E.secrets());
 	const { text } = await everythingStoredAsText(page);
 	expect(text).not.toContain(customer);
-	expect(text).not.toContain('Mixnode');
+	expect(text).not.toContain('Serverbetrieb');
 	for (const key of [secrets.signingKey, secrets.databaseKey]) {
 		for (const form of spellings(key)) expect(text).not.toContain(form);
 	}

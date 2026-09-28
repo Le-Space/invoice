@@ -171,8 +171,6 @@ export default {
 					'An diese Adressen wird eine Krypto-Rechnung gezahlt. Die Ethereum-Adresse gilt auch für POL und USDC, auf jeder EVM-Chain.',
 				btc: 'Bitcoin',
 				eth: 'Ethereum / EVM',
-				nym: 'NYM (Nyx)',
-				akt: 'Akash',
 				invalidAddress: 'Keine gültige Adresse für dieses Netzwerk',
 				defaults: 'Voreinstellungen',
 				taxMode: 'Besteuerung',

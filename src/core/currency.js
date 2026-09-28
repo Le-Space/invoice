@@ -40,6 +40,15 @@ export const CURRENCIES = Object.freeze({
 	POL: { code: 'POL', decimals: 8, unitDecimals: 18, kind: 'crypto', symbol: 'POL' }
 });
 
+/**
+ * The currencies a new invoice may be written in. NYM and AKT stay known, so
+ * that invoices issued in them still read and print as they were issued, but
+ * no new one is written in them: there is no address for them to be paid to.
+ */
+export const INVOICE_CURRENCIES = Object.freeze(
+	Object.keys(CURRENCIES).filter((code) => code !== 'NYM' && code !== 'AKT')
+);
+
 /** The currency German VAT is owed in, whatever the invoice is written in. */
 export const VAT_CURRENCY = 'EUR';
 

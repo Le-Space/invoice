@@ -66,43 +66,6 @@ Kind regards
 /** @type {readonly ChainTemplate[]} */
 export const CHAIN_TEMPLATES = Object.freeze([
 	{
-		id: 'nym-node',
-		name: { de: 'NYM – Betrieb eines Nym-Knotens', en: 'NYM – operating a Nym node' },
-		currency: 'NYM',
-		network: 'nyx',
-		lines: [
-			{
-				de: 'Betrieb eines Nym-Knotens',
-				en: 'Operating a Nym node',
-				unit: { de: 'Monat', en: 'month' }
-			}
-		],
-		text: letter({
-			de: 'für den Betrieb unseres Knotens im Nym-Netzwerk berechnen wir Ihnen die folgenden Leistungen.',
-			en: 'for operating our node in the Nym network we invoice you as follows.'
-		})
-	},
-	{
-		id: 'akash-provider',
-		name: {
-			de: 'AKT – Rechenkapazität über Akash',
-			en: 'AKT – compute provided through Akash'
-		},
-		currency: 'AKT',
-		network: 'akash',
-		lines: [
-			{
-				de: 'Bereitstellung von Rechenkapazität über Akash',
-				en: 'Compute provided through Akash',
-				unit: { de: 'Monat', en: 'month' }
-			}
-		],
-		text: letter({
-			de: 'für die Rechenkapazität, die wir Ihnen über das Akash-Netzwerk bereitgestellt haben, berechnen wir Ihnen die folgenden Leistungen.',
-			en: 'for the compute we provided to you through the Akash network we invoice you as follows.'
-		})
-	},
-	{
 		id: 'bitcoin',
 		name: { de: 'BTC – Zahlung in Bitcoin', en: 'BTC – payment in bitcoin' },
 		currency: 'BTC',

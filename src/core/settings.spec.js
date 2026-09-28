@@ -4,6 +4,7 @@ import {
 	defaultInvoiceSettings,
 	isInvoiceSettingsKey,
 	nextNumberFor,
+	emptyIssuer,
 	normaliseInvoiceSettings
 } from './settings.js';
 import { seriesDigits } from './series.js';
@@ -44,8 +45,17 @@ describe('normaliseInvoiceSettings', () => {
 		const { issuer } = normaliseInvoiceSettings(stored, ALICE);
 		expect(issuer.bank).toEqual({ name: '', iban: '', bic: '' });
 		expect(issuer.register).toEqual({ court: '', number: '', managingDirector: '' });
-		expect(issuer.crypto).toEqual({ btc: '', eth: '', nym: '', akt: '' });
+		expect(issuer.crypto).toEqual({ btc: '', eth: '' });
 		expect(issuer.logo).toBe('');
+	});
+
+	it('keeps only the Bitcoin and the Ethereum address, dropping those of an earlier build', () => {
+		expect(emptyIssuer({ crypto: { btc: 'x', eth: 'y', nym: 'n', akt: 'a' } }).crypto).toEqual({
+			btc: 'x',
+			eth: 'y'
+		});
+		const stored = { issuer: { name: 'Wolkenfabrik UG', crypto: { nym: 'n', eth: 'y' } } };
+		expect(normaliseInvoiceSettings(stored, ALICE).issuer.crypto).toEqual({ btc: '', eth: 'y' });
 	});
 
 	it('keeps a bank somebody has already filled in', () => {

@@ -85,6 +85,7 @@
 			"patternYear": "Ein Kreis, der jedes Jahr neu beginnt, braucht das Jahr in der Nummer — sonst entstehen doppelte Nummern.",
 			"patternMonth": "Ein Kreis, der jeden Monat neu beginnt, braucht Jahr und Monat in der Nummer.",
 			"currency": "Diese Währung kennt die Rechnung nicht.",
+			"currencyRetired": "In dieser Währung wird keine neue Rechnung mehr ausgestellt: Es gibt keine Adresse, an die gezahlt wird.",
 			"eurRate": "Eine Rechnung in einer anderen Währung als Euro gibt die USt. auch in Euro an: Kurs, Quelle und Datum fehlen.",
 			"eurRateMonth": "Der Kurs muss aus dem Monat der Leistung stammen (§ 16 Abs. 6 UStG).",
 			"cryptoTransaction": "Diese Buchung ist keine Krypto-Transaktion mit Menge und Kurs.",

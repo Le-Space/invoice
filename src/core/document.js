@@ -12,7 +12,7 @@
  */
 
 import { giroCodePayload, remittanceFor } from './girocode.js';
-import { cryptoPaymentCode } from './payment-code.js';
+import { cryptoPaymentCode, cryptoShown } from './payment-code.js';
 import { fillPlaceholders, parseTemplate, renderBlock, templateContext } from './template.js';
 import { VAT_CURRENCY, currencyOf } from './currency.js';
 import { formatAmount, formatMoney } from './money.js';
@@ -144,7 +144,12 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 	const customer = invoice.customer ?? {};
 	const bank = issuer.bank ?? {};
 	const register = issuer.register ?? {};
-	const crypto = issuer.crypto ?? {};
+	// An issued invoice shows the addresses frozen with it; a draft shows what
+	// issuing will freeze: only the address it is paid to, none in euros.
+	const crypto =
+		invoice.state === 'issued'
+			? (issuer.crypto ?? {})
+			: cryptoShown(String(currency), issuer.crypto);
 	const due = dueDay(invoice.issueDate, invoice.paymentTermsDays);
 	const address = asLines([issuer.address]);
 
@@ -345,6 +350,8 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 					pair(labels.accountHolder, issuer.name && bank.iban ? issuer.name : '')
 				],
 				[
+					// As frozen: an invoice issued before showed every address the
+					// settings had (NYM and Akash too); a new one only its own.
 					pair(labels.btc, crypto.btc),
 					pair(labels.eth, crypto.eth),
 					pair(labels.nym, crypto.nym),

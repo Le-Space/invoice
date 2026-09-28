@@ -41,7 +41,7 @@ const settings = normaliseInvoiceSettings(
 		issuer: {
 			name: 'Wolkenfabrik Hosting UG',
 			address: 'Musterstraße 1\n12345 Musterstadt',
-			crypto: { nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc' }
+			crypto: { eth: '0x0000000000000000000000000000000000000001' }
 		},
 		taxMode: 'kleinunternehmer'
 	},
@@ -57,28 +57,29 @@ describe('the invoice actions', () => {
 	});
 
 	it('set a draft up for a chain from a template', async () => {
-		const draft = await createDraft(store, settings, { templateId: 'nym-node' });
+		const draft = await createDraft(store, settings, { templateId: 'usdc-base' });
 		expect(draft).toMatchObject({
-			currency: 'NYM',
-			network: 'nyx',
-			chainTemplate: 'nym-node',
-			lines: [expect.objectContaining({ description: 'Betrieb eines Nym-Knotens' })]
+			currency: 'USDC',
+			decimals: 6,
+			network: 'base',
+			chainTemplate: 'usdc-base',
+			lines: [expect.objectContaining({ description: '' })]
 		});
 	});
 
 	it('issue a draft with the next number of this passkey’s circle, and never rewrite it', async () => {
-		const draft = await createDraft(store, settings, { templateId: 'nym-node' });
+		const draft = await createDraft(store, settings, { templateId: 'usdc-base' });
 		const ready = await saveDraft(store, {
 			...draft,
 			customer,
-			lines: [{ ...draft.lines[0], unitPrice: '12500000' }]
+			lines: [{ ...draft.lines[0], description: 'Serverbetrieb', unitPrice: '12500000' }]
 		});
 		const now = new Date('2026-09-26T10:00:00Z');
 		const issued = await issueDraft(store, { draft: ready, settings, did: DID, invoices: [], now });
 		expect(issued.state).toBe('issued');
 		expect(issued.id).toBe(draft.id);
 		expect(issued.number).toMatch(/^2026-\d{5}-001$/);
-		expect(issued.template).toContain('Nym-Netzwerk');
+		expect(issued.template).toContain('im Netzwerk **{{netzwerk}}**');
 		await expect(saveDraft(store, { ...issued, notes: 'changed' })).rejects.toThrow(
 			/not rewritten/
 		);

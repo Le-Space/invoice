@@ -33,7 +33,7 @@ export function isInvoiceSettingsKey(key) {
  *   name: string, address: string, vatId: string, taxNumber: string,
  *   email: string, phone: string, web: string,
  *   bank: { name: string, iban: string, bic: string },
- *   crypto: { btc: string, eth: string, nym: string, akt: string },
+ *   crypto: { btc: string, eth: string },
  *   register: { court: string, number: string, managingDirector: string },
  *   logo: string
  * }} Issuer
@@ -53,7 +53,9 @@ export function emptyIssuer(values = {}) {
 		bank: { name: '', iban: '', bic: '', ...(values.bank ?? {}) },
 		// Where an invoice in that currency is paid to (payment-code.js); `eth`
 		// serves ETH, POL and USDC alike, an EVM address being the same on each.
-		crypto: { btc: '', eth: '', nym: '', akt: '', ...(values.crypto ?? {}) },
+		// Only these two: addresses on other chains are not published (an
+		// earlier build had NYM and Akash; the next save drops them).
+		crypto: { btc: values.crypto?.btc ?? '', eth: values.crypto?.eth ?? '' },
 		register: { court: '', number: '', managingDirector: '', ...(values.register ?? {}) },
 		// A PNG as a data URL. It travels with the list, because a logo that
 		// lives on one device is missing from every invoice the other one writes.

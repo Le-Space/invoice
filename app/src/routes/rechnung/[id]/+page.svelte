@@ -1,7 +1,7 @@
 <script>
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { CURRENCIES } from '@le-space/invoice/currency';
+	import { INVOICE_CURRENCIES } from '@le-space/invoice/currency';
 	import { CURRENCY_NETWORKS, NETWORKS } from '@le-space/invoice/networks';
 	import {
 		draftProblems,
@@ -378,7 +378,8 @@
 					onchange={(e) => changeCurrency(e.currentTarget.value)}
 					data-testid="currency"
 				>
-					{#each Object.keys(CURRENCIES) as code (code)}
+					<!-- An older draft in a retired currency still shows it, and is flagged. -->
+					{#each INVOICE_CURRENCIES.includes(draft.currency) ? INVOICE_CURRENCIES : [...INVOICE_CURRENCIES, draft.currency] as code (code)}
 						<option value={code}>{code}</option>
 					{/each}
 				</select></label

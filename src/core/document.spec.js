@@ -68,9 +68,7 @@ const ISSUER = {
 	bank: { name: 'Testbank', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' },
 	crypto: {
 		btc: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
-		eth: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
-		nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc',
-		akt: 'akash1qyqszqgpqyqszqgpqyqszqgpqyqszqgplgve5x'
+		eth: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed'
 	},
 	register: {
 		court: 'Amtsgericht Musterstadt',
@@ -78,6 +76,19 @@ const ISSUER = {
 		managingDirector: 'Erika Mustermann'
 	},
 	logo: ''
+};
+
+/**
+ * The issuer as an earlier build froze it into an invoice, with NYM and Akash
+ * addresses (Cosmos addresses made of zero bytes).
+ */
+const LEGACY_ISSUER = {
+	...ISSUER,
+	crypto: {
+		...ISSUER.crypto,
+		nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc',
+		akt: 'akash1qyqszqgpqyqszqgpqyqszqgpqyqszqgplgve5x'
+	}
 };
 
 function issued(/** @type {any} */ changes = {}) {
@@ -282,8 +293,40 @@ describe('the footer', () => {
 		expect(text[2]).toContain('IBAN: DE89 3704 0044 0532 0130 00');
 	});
 
-	it('takes crypto accounts along when they are filled in', () => {
-		const { footer } = documentModel(issued(), LABELS);
+	it('shows no crypto address on an invoice in euros, issued or draft', () => {
+		const invoice = issued();
+		expect(invoice.issuer.crypto).toEqual({});
+		const labels = documentModel(invoice, LABELS)
+			.footer.flat()
+			.map((cell) => cell.label);
+		expect(labels).not.toContain('Bitcoin:');
+		expect(labels).not.toContain('Ethereum:');
+		const draftLabels = documentModel({ ...invoice, state: 'draft', issuer: ISSUER }, LABELS)
+			.footer.flat()
+			.map((cell) => cell.label);
+		expect(draftLabels).not.toContain('Bitcoin:');
+		expect(draftLabels).not.toContain('Ethereum:');
+	});
+
+	it('shows only the address an invoice in a crypto currency is paid to', () => {
+		const draft = {
+			...issued(),
+			state: 'draft',
+			issuer: ISSUER,
+			currency: 'BTC',
+			network: 'bitcoin'
+		};
+		expect(documentModel(draft, LABELS).footer[3]).toEqual([
+			{ label: 'Bitcoin:', value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' }
+		]);
+		const usdc = { ...draft, currency: 'USDC', network: 'base' };
+		expect(documentModel(usdc, LABELS).footer[3]).toEqual([
+			{ label: 'Ethereum:', value: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed' }
+		]);
+	});
+
+	it('still prints the NYM and Akash addresses of an invoice issued with them', () => {
+		const { footer } = documentModel({ ...issued(), issuer: LEGACY_ISSUER }, LABELS);
 		expect(footer[3]).toEqual([
 			{ label: 'Bitcoin:', value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' },
 			{ label: 'Ethereum:', value: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed' },
@@ -304,46 +347,46 @@ describe('the footer', () => {
 });
 
 describe('an invoice in another currency', () => {
-	const RATE = { eurPerUnit: '0.0612', source: 'Kraken', date: '2026-09-24' };
-	const nym = () =>
+	const RATE = { eurPerUnit: '0.9123', source: 'Kraken', date: '2026-09-24' };
+	const usdc = () =>
 		issued({
-			currency: 'NYM',
+			currency: 'USDC',
 			decimals: 6,
-			network: 'nyx',
+			network: 'base',
 			eurRate: RATE,
-			lines: [emptyLine({ description: 'Mixnode-Betrieb', quantity: 3, unitPrice: '1500000' })]
+			lines: [emptyLine({ description: 'Serverbetrieb', quantity: 3, unitPrice: '1500000' })]
 		});
 
 	it('writes every figure in that currency', () => {
-		const model = documentModel(nym(), LABELS);
+		const model = documentModel(usdc(), LABELS);
 		expect(model.rows[0]).toMatchObject({ quantity: '3', unitPrice: '1,50', net: '4,50' });
-		expect(model.netNote).toBe('Einzelpreise und Beträge netto in NYM.');
-		expect(model.payment).toContain('5,355\u00A0NYM');
+		expect(model.netNote).toBe('Einzelpreise und Beträge netto in USDC.');
+		expect(model.payment).toContain('5,355\u00A0USDC');
 	});
 
 	it('states the VAT in euros too, with the rate, its source and its day', () => {
-		const rows = documentModel(nym(), LABELS).totals;
+		const rows = documentModel(usdc(), LABELS).totals;
 		expect(rows.map((row) => [row.label, row.value])).toEqual([
-			['Zwischensumme ohne USt.', '4,50\u00A0NYM'],
-			['USt. 19 % von 4,50\u00A0NYM', '0,855\u00A0NYM'],
-			['Gesamt EUR', '5,355\u00A0NYM'],
-			['Zu zahlender Betrag EUR', '5,355\u00A0NYM'],
-			['USt. in EUR', '0,05\u00A0€']
+			['Zwischensumme ohne USt.', '4,50\u00A0USDC'],
+			['USt. 19 % von 4,50\u00A0USDC', '0,855\u00A0USDC'],
+			['Gesamt EUR', '5,355\u00A0USDC'],
+			['Zu zahlender Betrag EUR', '5,355\u00A0USDC'],
+			['USt. in EUR', '0,78\u00A0€']
 		]);
-		expect(documentModel(nym(), LABELS).rateNote).toBe(
-			'Umrechnung der USt.: 1 NYM = 0,0612 € (Kraken, 24.09.2026).'
+		expect(documentModel(usdc(), LABELS).rateNote).toBe(
+			'Umrechnung der USt.: 1 USDC = 0,9123 € (Kraken, 24.09.2026).'
 		);
 	});
 
 	it('asks for a payment to the address, not to the bank account', () => {
-		const { payment } = documentModel(nym(), LABELS);
+		const { payment } = documentModel(usdc(), LABELS);
 		expect(payment).toContain('an die angegebene Adresse');
 		expect(payment).not.toContain('überweisen');
 	});
 
 	it('groups a large rate, and leaves its decimals as they were given', () => {
 		const model = documentModel(
-			{ ...nym(), currency: 'BTC', eurRate: { ...RATE, eurPerUnit: '95000.125' } },
+			{ ...usdc(), currency: 'BTC', eurRate: { ...RATE, eurPerUnit: '95000.125' } },
 			LABELS
 		);
 		expect(model.rateNote).toContain('1 BTC = 95.000,125 €');
@@ -359,17 +402,47 @@ describe('an invoice in another currency', () => {
 	});
 
 	it('carries no GiroCode, which is for euros only', () => {
-		expect(documentModel(nym(), LABELS).giro).toBeNull();
+		expect(documentModel(usdc(), LABELS).giro).toBeNull();
 	});
 
-	it('carries a code of the address instead, and writes the address out', () => {
-		expect(documentModel(nym(), LABELS).payCode).toEqual({
-			payload: ISSUER.crypto.nym,
+	it('carries a token transfer of the amount on its network, and writes the address out', () => {
+		expect(documentModel(usdc(), LABELS).payCode).toEqual({
+			payload: `ethereum:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913@8453/transfer?address=${ISSUER.crypto.eth}&uint256=5355000`,
+			caption: 'USDC auf Base',
+			hint: 'Eine Wallet, die den Code scannt, übernimmt Adresse und Betrag.',
+			address: `Adresse im Netzwerk Base: ${ISSUER.crypto.eth}`,
+			to: ISSUER.crypto.eth,
+			network: 'Base'
+		});
+	});
+
+	it('carries a code of the address alone on an invoice issued in NYM before', () => {
+		// Issued while NYM was still offered: the record and its issuer are
+		// frozen, so it is built here as it was stored, not issued anew.
+		const base = usdc();
+		const inNym = {
+			...base,
+			currency: 'NYM',
+			network: 'nyx',
+			eurRate: { ...RATE, eurPerUnit: '0.0612' },
+			// 0.855 NYM × 0.0612 €/NYM = 0.052326 € → 5 cents
+			totals: { ...base.totals, taxInEuroCents: '5' },
+			issuer: LEGACY_ISSUER
+		};
+		const model = documentModel(inNym, LABELS);
+		expect(model.payCode).toEqual({
+			payload: LEGACY_ISSUER.crypto.nym,
 			caption: 'NYM auf Nyx',
 			hint: 'Der Code enthält die Adresse; den Betrag geben Sie bitte selbst ein.',
-			address: `Adresse im Netzwerk Nyx: ${ISSUER.crypto.nym}`,
-			to: ISSUER.crypto.nym,
+			address: `Adresse im Netzwerk Nyx: ${LEGACY_ISSUER.crypto.nym}`,
+			to: LEGACY_ISSUER.crypto.nym,
 			network: 'Nyx'
+		});
+		expect(model.payment).toContain('5,355\u00A0NYM');
+		expect(model.totals.at(-1)).toMatchObject({ label: 'USt. in EUR', value: '0,05\u00A0€' });
+		expect(model.footer[3]).toContainEqual({
+			label: 'NYM:',
+			value: LEGACY_ISSUER.crypto.nym
 		});
 	});
 
