@@ -14,6 +14,19 @@ test('an invoice in euros with crypto lines, summed per asset', async ({ page })
 	await page.getByRole('link', { name: 'Einstellungen' }).click();
 	await page.getByTestId('issuer-name').fill('Wolkenfabrik Hosting UG');
 	await page.getByTestId('issuer-address').fill('Musterstraße 1\n12345 Musterstadt');
+	// An own unit, and it for new lines; crypto lines keep Pauschale.
+	await page.getByTestId('unit-new').fill('Lizenz');
+	await page.getByTestId('unit-add').click();
+	await expect(page.getByTestId('unit')).toContainText([
+		'Stück',
+		'Stunde',
+		'Tag',
+		'Monat',
+		'Pauschale',
+		'Lizenz'
+	]);
+	await page.getByTestId('default-unit').selectOption('Lizenz');
+	await expect(page.getByTestId('crypto-unit')).toHaveValue('Pauschale');
 	await page.getByTestId('save-settings').click();
 	await expect(page.getByRole('status')).toContainText('Gespeichert');
 
@@ -25,6 +38,8 @@ test('an invoice in euros with crypto lines, summed per asset', async ({ page })
 	await page.getByTestId('customer-address').fill('Beispielweg 2\n54321 Beispielstadt');
 	const delivery = await page.getByTestId('delivery-date').inputValue();
 
+	// The first line counts in the unit chosen for new lines.
+	await expect(page.getByTestId('line-unit').first()).toHaveValue('Lizenz');
 	// The empty first line becomes an ordinary one.
 	await page.getByTestId('line-description').first().fill('Einrichtung');
 	await page.getByTestId('line-price').first().fill('50');
@@ -46,6 +61,7 @@ test('an invoice in euros with crypto lines, summed per asset', async ({ page })
 	}
 	// Computed, not typed: 12.5 × 0.0612 € = 0.77 €.
 	const first = page.getByTestId('line').nth(1);
+	await expect(first.getByTestId('line-unit')).toHaveValue('Pauschale');
 	await expect(first.getByTestId('line-price')).toHaveValue('0,77');
 	await expect(first.getByTestId('crypto-subtitle')).toContainText('12,5 NYM zu 0,0612 € je NYM');
 

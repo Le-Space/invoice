@@ -1,5 +1,5 @@
 <script>
-	import { circleOf } from '@le-space/invoice/settings';
+	import { UNIT_MAX_LENGTH, circleOf, normaliseUnits } from '@le-space/invoice/settings';
 	import { payToAddress } from '@le-space/invoice/payment-code';
 	import { t } from '$lib/i18n/index.js';
 	import { app, currentStore } from '$lib/session.svelte.js';
@@ -19,6 +19,25 @@
 		['btc', 'BTC'],
 		['eth', 'ETH']
 	]);
+
+	let newUnit = $state('');
+
+	function addUnit() {
+		const units = normaliseUnits([...form.units, newUnit]);
+		form.units = units;
+		newUnit = '';
+	}
+
+	/** @param {number} index */
+	function removeUnit(index) {
+		const gone = form.units[index];
+		form.units = normaliseUnits(
+			form.units.filter((/** @type {string} */ _, /** @type {number} */ i) => i !== index)
+		);
+		// A default that is gone falls back to the first unit left.
+		if (form.defaultUnit === gone) form.defaultUnit = form.units[0];
+		if (form.cryptoUnit === gone) form.cryptoUnit = form.units[0];
+	}
 
 	/** @param {string} key @param {string} currency */
 	const invalid = (key, currency) =>
@@ -121,6 +140,63 @@
 					{/if}
 				</label>
 			{/each}
+		</fieldset>
+
+		<fieldset class={box}>
+			<legend class={legend}>{t('invoice.app.settings.units')}</legend>
+			<p class="text-xs text-faint sm:col-span-2">{t('invoice.app.settings.unitsHint')}</p>
+			<ul class="flex flex-wrap gap-2 sm:col-span-2" data-testid="units">
+				{#each form.units as name, index (name)}
+					<li
+						class="flex items-center gap-1 rounded-full border border-border px-3 py-1 text-sm"
+						data-testid="unit"
+					>
+						{name}
+						<button
+							type="button"
+							class="text-faint hover:text-danger disabled:opacity-30"
+							disabled={form.units.length <= 1}
+							onclick={() => removeUnit(index)}
+							aria-label={t('invoice.app.settings.unitRemove', { unit: name })}
+							data-testid="unit-remove">✕</button
+						>
+					</li>
+				{/each}
+			</ul>
+			<div class="flex gap-2 sm:col-span-2">
+				<input
+					class={input}
+					bind:value={newUnit}
+					maxlength={UNIT_MAX_LENGTH}
+					placeholder={t('invoice.app.settings.unitNew')}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							e.preventDefault();
+							addUnit();
+						}
+					}}
+					data-testid="unit-new"
+				/>
+				<button
+					type="button"
+					class="rounded-md border border-border px-3 py-1.5 text-sm"
+					disabled={!newUnit.trim()}
+					onclick={addUnit}
+					data-testid="unit-add">{t('invoice.app.settings.unitAdd')}</button
+				>
+			</div>
+			<label class="text-sm"
+				><span class={label}>{t('invoice.app.settings.defaultUnit')}</span>
+				<select class={input} bind:value={form.defaultUnit} data-testid="default-unit">
+					{#each form.units as name (name)}<option value={name}>{name}</option>{/each}
+				</select></label
+			>
+			<label class="text-sm"
+				><span class={label}>{t('invoice.app.settings.cryptoUnit')}</span>
+				<select class={input} bind:value={form.cryptoUnit} data-testid="crypto-unit">
+					{#each form.units as name (name)}<option value={name}>{name}</option>{/each}
+				</select></label
+			>
 		</fieldset>
 
 		<fieldset class={box}>

@@ -104,8 +104,11 @@
 		if (quantity !== null) draft.lines[index].quantity = quantity;
 	}
 
+	/** The units the settings keep, offered for every line (typing another is fine). */
+	let units = $derived(/** @type {string[]} */ (app.settings?.units ?? []));
+
 	function addLine() {
-		draft.lines.push(emptyLine());
+		draft.lines.push(emptyLine({ unit: app.settings?.defaultUnit ?? 'Stück' }));
 		priceText.push(formatAmount('0', unit));
 	}
 
@@ -117,7 +120,7 @@
 	/** A line of crypto: asset, quantity and rate typed in, the price in euros computed. */
 	function addCryptoLine() {
 		draft.lines.push({
-			...emptyLine(),
+			...emptyLine({ unit: app.settings?.cryptoUnit ?? 'Pauschale' }),
 			crypto: {
 				asset: '',
 				quantity: '',
@@ -481,6 +484,9 @@
 
 		<fieldset class="space-y-3 rounded-lg border border-border bg-surface p-4">
 			<legend class="px-1 text-sm font-medium text-heading">{t('invoice.form.lines')}</legend>
+			<datalist id="units">
+				{#each units as name (name)}<option value={name}></option>{/each}
+			</datalist>
 			{#each draft.lines as line, index (index)}
 				<div
 					class="grid gap-2 border-b border-border pb-3 last:border-0 sm:grid-cols-[1fr_5rem_6rem_8rem_5rem_auto]"
@@ -507,7 +513,12 @@
 					>
 					<label class="text-sm"
 						><span class={label}>{t('invoice.form.lineUnit')}</span>
-						<input class={input} bind:value={line.unit} /></label
+						<input
+							class={input}
+							bind:value={line.unit}
+							list="units"
+							data-testid="line-unit"
+						/></label
 					>
 					<label class="text-sm"
 						><span class={label}
