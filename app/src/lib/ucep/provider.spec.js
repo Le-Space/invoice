@@ -9,19 +9,27 @@ import { yamux } from '@chainsafe/libp2p-yamux';
 import { identify, identifyPush } from '@libp2p/identify';
 import { createConsumer } from '@le-space/ucep';
 import { t } from '../i18n/index.js';
-import { SCOPES, createInvoiceProvider, eigenbelegFile } from './provider.js';
+import { SCOPES, createInvoiceProvider, eigenbelegFile, invoiceCommands } from './provider.js';
+import { LAST_USED_EVERY_MS, collectionKeyValue, onlyRecentlyUsed } from './store.js';
 
 /** A collection that keeps records in memory, the way store/repository.js does. */
 function memoryCollection() {
 	/** @type {Map<string, any>} */
 	const records = new Map();
+	/** @type {Set<() => void>} */
+	const listeners = new Set();
 	let next = 0;
 	return {
 		async put(/** @type {any} */ input) {
 			const id = input.id ?? `01J${String(next++).padStart(23, '0')}`;
 			const record = { deleted: false, ...(records.get(id) ?? {}), ...input, id };
 			records.set(id, record);
+			for (const l of listeners) l();
 			return record;
+		},
+		onChange(/** @type {() => void} */ listener) {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
 		},
 		async get(/** @type {string} */ id) {
 			return records.get(id) ?? null;
@@ -32,6 +40,7 @@ function memoryCollection() {
 		},
 		async softDelete(/** @type {string} */ id) {
 			records.set(id, { ...records.get(id), deleted: true });
+			for (const l of listeners) l();
 		}
 	};
 }
@@ -204,5 +213,93 @@ describe('the invoice extension, served', () => {
 		await expect(
 			consumer.call(providerId, 'invoice', 'status', { documentId: 'x' })
 		).rejects.toMatchObject({ code: 'PAIRING_REQUIRED' });
+	});
+});
+
+describe('create-eigenbeleg, called directly', () => {
+	const issuer = { name: 'Stromwerk Test AG', address: 'Teststraße 2\n54321 Probestadt' };
+	/** @param {any} invoices */
+	const commands = (invoices) =>
+		invoiceCommands({
+			store: /** @type {any} */ ({ invoices }),
+			settings: () => ({ issuer }),
+			t,
+			now: () => new Date('2026-09-26T10:00:00+02:00')
+		});
+	const grantA = { grantId: 'grant-a', label: 'Belege A', did: '' };
+	const grantB = { grantId: 'grant-b', label: 'Belege B', did: '' };
+	/** @param {any} c @param {any} grant @param {string} requestId */
+	const create = (c, grant, requestId) =>
+		c['create-eigenbeleg'].handler({ argsJson: args, grant, peerId: 'peer', requestId });
+
+	it('numbers calls that arrive together one after another, never twice', async () => {
+		const c = commands(memoryCollection());
+		const made = await Promise.all([
+			create(c, grantA, 'a-1'),
+			create(c, grantA, 'a-2'),
+			create(c, grantB, 'b-1'),
+			create(c, grantB, 'b-2')
+		]);
+		expect(new Set(made.map((m) => m.number)).size).toBe(4);
+	});
+
+	it('answers a request it answered before with the same Eigenbeleg, also after a reload', async () => {
+		const invoices = memoryCollection();
+		const first = await create(commands(invoices), grantA, 'belege-eigenbeleg-1');
+		// Another run of the app on the same books: the library's memory is gone.
+		const again = await create(commands(invoices), grantA, 'belege-eigenbeleg-1');
+		expect(again).toEqual(first);
+		// A retry while the first call still runs, in the same app.
+		const running = commands(invoices);
+		const both = await Promise.all([
+			create(running, grantA, 'belege-eigenbeleg-2'),
+			create(running, grantA, 'belege-eigenbeleg-2')
+		]);
+		expect(both[0].documentId).toBe(both[1].documentId);
+		expect((await invoices.list()).length).toBe(2);
+		// Another grant with the same request id: its own.
+		const other = await create(commands(invoices), grantB, 'belege-eigenbeleg-1');
+		expect(other.documentId).not.toBe(first.documentId);
+	});
+});
+
+describe('the grant store', () => {
+	const grant = { grantId: 'g', scopes: ['invoice:document:read'], lastUsedAt: 1_000 };
+
+	it('writes a lastUsedAt alone at most once an hour', async () => {
+		expect(onlyRecentlyUsed(grant, { ...grant, lastUsedAt: 2_000 })).toBe(true);
+		expect(onlyRecentlyUsed(grant, { ...grant, lastUsedAt: 1_000 + LAST_USED_EVERY_MS })).toBe(
+			false
+		);
+		expect(onlyRecentlyUsed(grant, { ...grant, scopes: [], lastUsedAt: 2_000 })).toBe(false);
+
+		const settings = memoryCollection();
+		const grants = collectionKeyValue(/** @type {any} */ (settings), 'ucep/grant/');
+		await grants.set('g', grant);
+		for (let i = 1; i <= 50; i++) await grants.set('g', { ...grant, lastUsedAt: 1_000 + i });
+		expect((await settings.list({ includeDeleted: true })).length).toBe(1);
+		expect(await grants.get('g')).toEqual(grant);
+	});
+
+	it('reads the settings again once they change, and not before', async () => {
+		const settings = memoryCollection();
+		let reads = 0;
+		const counted = /** @type {any} */ ({
+			...settings,
+			list: (/** @type {any} */ o) => {
+				reads++;
+				return settings.list(o);
+			}
+		});
+		const grants = collectionKeyValue(counted, 'ucep/grant/');
+		await grants.set('g', grant);
+		const before = reads;
+		for (let i = 0; i < 20; i++) await grants.get('g');
+		expect(reads - before).toBe(1);
+		// A write from elsewhere (another tab, a sync): read anew.
+		await settings.put({ key: 'ucep/grant/h', value: { ...grant, grantId: 'h' } });
+		expect((await grants.values()).map((g) => g.grantId).sort()).toEqual(['g', 'h']);
+		await grants.delete('g');
+		expect(await grants.get('g')).toBeUndefined();
 	});
 });
