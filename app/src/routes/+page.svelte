@@ -8,6 +8,7 @@
 	import { t } from '$lib/i18n/index.js';
 	import { app, currentStore } from '$lib/session.svelte.js';
 	import { createDraft } from '$lib/invoices.js';
+	import PaymentBadge from '$lib/PaymentBadge.svelte';
 
 	let templateId = $state('');
 	let busy = $state(false);
@@ -99,6 +100,7 @@
 								>
 								{#if invoice.number}
 									<span class="ml-1 text-xs text-faint">{stateLabel(invoice)}</span>
+									<PaymentBadge {invoice} />
 								{/if}
 							</td>
 							<td class="px-3 py-2 text-text"

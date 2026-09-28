@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { normaliseInvoiceSettings } from '@le-space/invoice/settings';
 import { emptyLine } from '@le-space/invoice/records';
-import { createDraft, draftCancellation, issueDraft, saveDraft, saveSettings } from './invoices.js';
+import {
+	createDraft,
+	draftCancellation,
+	issueDraft,
+	paymentOf,
+	saveDraft,
+	saveSettings,
+	today,
+	updatePayments
+} from './invoices.js';
 
 /** A collection that keeps records in memory, the way store/repository.js does. */
 function memoryCollection() {
@@ -112,6 +121,49 @@ describe('the invoice actions', () => {
 		expect(storno).toMatchObject({ state: 'draft', cancels: issued.number });
 		expect(storno.id).not.toBe(issued.id);
 		expect(storno.lines[0].quantity).toBe(-1);
+	});
+
+	it('keep reported payments on an issued invoice, and write nothing else', async () => {
+		const draft = await createDraft(store, settings);
+		const issued = await issueDraft(store, {
+			draft: await saveDraft(store, {
+				...draft,
+				customer,
+				lines: [emptyLine({ description: 'Beratung', unitPrice: '10000' })]
+			}),
+			settings,
+			did: DID,
+			invoices: [],
+			now: new Date('2026-09-01T10:00:00Z')
+		});
+		const payment = {
+			paidOn: '2026-09-05',
+			units: '4000',
+			reference: { system: 'belege', id: '01J0000000000000000000000D' }
+		};
+		const after = await updatePayments(store, issued.id, (payments) => [...payments, payment]);
+		const { payments, ...rest } = after;
+		expect(rest).toEqual(issued);
+		expect(payments).toEqual([payment]);
+
+		// Kleinunternehmer: 100.00 due, 40.00 paid.
+		expect(paymentOf(after, after.issueDate)).toMatchObject({
+			status: 'partially-paid',
+			total: 10000n,
+			paid: 4000n
+		});
+		// Past its payment terms (14 days from the draft's issue date).
+		expect(paymentOf(after, '2999-01-01')?.status).toBe('overdue');
+		expect(paymentOf({ ...after, cancelledBy: 'X' }, '2026-09-10')).toBeNull();
+
+		// The guard for everything else stays.
+		await expect(saveDraft(store, { ...after, notes: 'changed' })).rejects.toThrow(/not rewritten/);
+		// A draft takes no payment, and neither does an id nobody knows.
+		await expect(updatePayments(store, 'none', (p) => p)).rejects.toThrow(/issued invoices only/);
+		const other = await createDraft(store, settings);
+		await expect(updatePayments(store, other.id, (p) => p)).rejects.toThrow(/issued invoices only/);
+		expect(paymentOf(other, '2026-09-10')).toBeNull();
+		expect(today(new Date(2026, 8, 28, 23, 30))).toBe('2026-09-28');
 	});
 
 	it('keep the settings under one key', async () => {
