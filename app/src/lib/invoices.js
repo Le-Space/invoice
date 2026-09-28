@@ -2,7 +2,14 @@
 // and the sealed store. Kept apart from the components so it can be tested
 // without a browser.
 
-import { cancellationFor, emptyDraft, issue, upgradeInvoice } from '@le-space/invoice/records';
+import {
+	cancellationFor,
+	emptyDraft,
+	invoiceTotals,
+	issue,
+	upgradeInvoice
+} from '@le-space/invoice/records';
+import { paidUnits, paymentStatus } from '@le-space/invoice/payments';
 import { applyChainTemplate, chainTemplateText } from '@le-space/invoice/chain-templates';
 import { nextNumberFor } from '@le-space/invoice/settings';
 import { setSetting } from './store/settings.js';
@@ -50,6 +57,58 @@ export async function saveDraft(store, draft) {
 	const stored = await store.invoices.get(draft.id);
 	if (stored && stored.state !== 'draft') throw new Error('An issued invoice is not rewritten.');
 	return store.invoices.put(draft);
+}
+
+/**
+ * Keep the payments another app reported for an issued invoice (UCEP
+ * `record-payment`). The one write an issued invoice takes after issuing, and
+ * it writes nothing but `payments`: every other field stays as it was issued.
+ * A draft, an Eigenbeleg or an unknown id is refused.
+ *
+ * @param {{ invoices: Collection }} store
+ * @param {string} id
+ * @param {(payments: any[]) => any[]} change the payments so far → the payments now
+ */
+export async function updatePayments(store, id, change) {
+	const stored = await store.invoices.get(id);
+	if (!stored || stored.deleted || stored.state !== 'issued' || stored.kind === 'eigenbeleg') {
+		throw new Error('Payments are kept for issued invoices only.');
+	}
+	const payments = change(Array.isArray(stored.payments) ? stored.payments : []);
+	return store.invoices.put({ id, payments });
+}
+
+/**
+ * What the screens say about an issued invoice's payment, or null where there
+ * is nothing to say: a draft, an Eigenbeleg, a cancelled invoice, a Storno.
+ *
+ * @param {any} invoice upgraded, with `cancelledBy` folded in (session.svelte.js)
+ * @param {string} today YYYY-MM-DD
+ * @returns {{ status: 'paid' | 'partially-paid' | 'overdue' | 'open', paidOn: string | null, total: bigint, paid: bigint } | null}
+ */
+export function paymentOf(invoice, today) {
+	if (
+		invoice?.state !== 'issued' ||
+		invoice.kind === 'eigenbeleg' ||
+		invoice.cancelledBy ||
+		invoice.cancels
+	) {
+		return null;
+	}
+	let total;
+	try {
+		total = BigInt(invoiceTotals(invoice).due);
+	} catch {
+		return null;
+	}
+	if (total <= 0n) return null;
+	return { ...paymentStatus(invoice, total, today), total, paid: paidUnits(invoice.payments) };
+}
+
+/** Today as YYYY-MM-DD, in the local time zone. */
+export function today(date = new Date()) {
+	const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+	return local.toISOString().slice(0, 10);
 }
 
 /**

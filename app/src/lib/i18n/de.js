@@ -11,16 +11,20 @@ export default {
 	ucep: {
 		manifest: {
 			name: 'Rechnungen',
-			description: 'Erstellt Eigenbelege und Rechnungsentwürfe für gekoppelte Apps.'
+			description:
+				'Erstellt Eigenbelege für gekoppelte Apps, zeigt ihnen ausgestellte Rechnungen und nimmt Zahlungsmeldungen an.'
 		},
 		scopes: {
 			eigenbeleg: 'Eigenbelege in deinem Namen erstellen.',
-			read: 'Dokumente lesen, die diese App angefordert hat, samt PDF.'
+			read: 'Dokumente lesen, die diese App angefordert hat, samt PDF.',
+			issuedRead:
+				'Deine ausgestellten Rechnungen lesen – Nummer, Kundenname, Beträge, Daten – samt PDF, um sie mit Zahlungen abzugleichen.',
+			paymentRecord: 'Melden, dass eine ausgestellte Rechnung bezahlt wurde, und wann.'
 		},
 		pairing: {
 			heading: 'Verbindungen',
 			intro:
-				'Andere Apps – zum Beispiel Belege – können diese App bitten, Eigenbelege zu erstellen. Dafür werden sie einmal gekoppelt: per Einladung oder mit einem sechsstelligen Code. Die Verbindung läuft über ein Relay und ist Ende zu Ende verschlüsselt; deine Rechnungen bleiben auf diesem Gerät.',
+				'Andere Apps – zum Beispiel Belege – können diese App bitten, Eigenbelege zu erstellen, oder deine ausgestellten Rechnungen lesen und melden, welche bezahlt sind. Dafür werden sie einmal gekoppelt: per Einladung oder mit einem sechsstelligen Code. Die Verbindung läuft über ein Relay und ist Ende zu Ende verschlüsselt; deine Rechnungen bleiben auf diesem Gerät.',
 			thisApp: 'Diese App',
 			online: 'Erreichbar',
 			offline: 'Nicht erreichbar',
@@ -34,7 +38,7 @@ export default {
 			failed: 'Die Verbindung konnte nicht aufgebaut werden:',
 			invitationHeading: 'Einladung',
 			invitationHint:
-				'Zeig den QR-Code oder gib den Link weiter. Wer ihn hat, kann sich einmal koppeln – mit den Rechten, die du hier anbietest. Er gilt zehn Minuten.',
+				'Zeig den QR-Code oder gib den Link weiter. Wer ihn nutzt, erscheint unten unter den Anfragen: Die andere App zeigt sechs Ziffern, du tippst sie hier ein und stimmst zu – erst dann ist sie gekoppelt, mit den Rechten, die du hier anbietest. Der Link gilt zehn Minuten und nur für eine Kopplung.',
 			invite: 'Einladung erstellen',
 			qr: 'QR-Code der Einladung',
 			expires: 'Gültig bis {when}',
@@ -56,7 +60,7 @@ export default {
 					'**Welches Relay:** Die App fragt api.aleph.im nach den aktuellen Adressen der Le-Space-Relays und nimmt nur Einträge der beiden Le-Space-Wallets an. Aleph sieht dabei die IP-Adresse dieses Geräts.',
 					'**Was das Relay sieht:** die IP-Adresse dieses Geräts und der gekoppelten App, beider Peer-IDs, wann sie verbunden sind und wie viele Bytes fließen. Nicht den Inhalt: Jede Verbindung ist Ende zu Ende verschlüsselt (Noise), und das Relay kann sich nicht als diese App ausgeben.',
 					'**Direkte Verbindung:** Damit das PDF direkt fließt, handeln die beiden Geräte WebRTC aus und fragen dafür öffentliche STUN-Server (Google, Twilio, Cloudflare, Mozilla) nach ihrer öffentlichen Adresse. Diese Server sehen die IP-Adresse, keine Inhalte.',
-					'**Was eine gekoppelte App bekommt:** nur, was ihre Rechte erlauben – Eigenbelege erstellen und die eigenen wieder lesen. Nie deine Rechnungen, Kunden oder die Eigenbelege anderer Apps. „Entkoppeln“ widerruft das sofort.',
+					'**Was eine gekoppelte App bekommt:** nur, was ihre Rechte erlauben – Eigenbelege erstellen und die eigenen wieder lesen; mit „invoice:issued:read“ deine ausgestellten Rechnungen (Nummer, Kundenname, Beträge, Daten, PDF), mit „invoice:payment:record“ Zahlungen dazu melden. Nie Entwürfe, deine Kundenliste oder die Eigenbelege anderer Apps. „Entkoppeln“ widerruft das sofort.',
 					'**Deine Peer-ID** kommt aus deinem Passkey und bleibt gleich, damit gekoppelte Apps dich wiederfinden. Wer sie kennt, kann darüber Verbindungen dieser App wiedererkennen.'
 				]
 			},
@@ -69,7 +73,11 @@ export default {
 			help: 'Was diese Erweiterung kann.',
 			createEigenbeleg: 'Einen Eigenbeleg für eine Zahlung ohne Beleg der Gegenseite erstellen.',
 			status: 'Den Stand eines Dokuments abfragen.',
-			getPdf: 'Das PDF eines Dokuments holen.'
+			getPdf:
+				'Das PDF eines Dokuments holen – eines eigenen oder, mit invoice:issued:read, einer ausgestellten Rechnung.',
+			listIssued: 'Die ausgestellten Rechnungen auflisten, mit Beträgen und gemeldeten Zahlungen.',
+			recordPayment:
+				'Eine Zahlung zu einer ausgestellten Rechnung melden, ändern oder zurücknehmen.'
 		}
 	},
 	onboarding: {
@@ -102,6 +110,11 @@ export default {
 				eigenbeleg: 'Eigenbeleg',
 				issued: 'Ausgestellt',
 				cancelled: 'Storniert',
+				paid: 'bezahlt',
+				paidOn: 'bezahlt am {date}',
+				partiallyPaid: 'teilweise bezahlt',
+				open: 'offen',
+				overdue: 'überfällig',
 				customer: 'Kunde',
 				date: 'Datum',
 				amount: 'Betrag',
@@ -130,6 +143,12 @@ export default {
 				pdf: 'PDF herunterladen',
 				cancel: 'Stornieren',
 				cancelled: 'Storniert durch {number}',
+				paymentsHeading: 'Gemeldete Zahlungen',
+				paymentLine: '{amount} am {date}',
+				reportedBy: 'gemeldet von {app} am {date}',
+				paidSum: 'Bezahlt',
+				openSum: 'Offen',
+				dueOn: 'Fällig am',
 				totals: 'Summe',
 				due: 'Zu zahlen'
 			},

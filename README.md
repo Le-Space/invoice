@@ -30,6 +30,7 @@ commit messages point to pull requests there.
 | `networks.js`                        | The chains a crypto invoice is paid on, with Belege's chain ids and USDC contracts                                  |
 | `chain-templates.js`                 | Templates per chain: currency, network, usual lines and a letter (NYM, AKT, BTC, ETH, USDC on Base)                 |
 | `eigenbeleg.js`, `eigenbeleg-pdf.js` | Self-issued receipts (Eigenbelege) for UCEP `create-eigenbeleg`: checked arguments, their own number range, the PDF |
+| `payments.js`                        | Payments reported for an issued invoice (UCEP `record-payment`): by reference, part payments, due day               |
 | `duplicates.js`                      | One number on two invoices is reported, not renumbered                                                              |
 
 `src/i18n/` – the German and English words of the printed invoice.
@@ -90,7 +91,10 @@ and is published here under MIT.
   (`VITE_RELAY_ADDRS` overrides; a fallback list when Aleph cannot be asked).
   An app paired by invitation (link or QR code) or by a six-digit code asks
   for an Eigenbeleg (`create-eigenbeleg`), its state (`status`) and its PDF
-  (`get-pdf`); a stranger gets `help` and nothing else. The peer id is derived
+  (`get-pdf`). Since extension 0.2.0 it also lists the issued invoices
+  (`list-issued`, with their PDFs by `get-pdf`) and reports which were paid
+  (`record-payment`); the list and the invoice then say bezahlt, teilweise
+  bezahlt, offen or überfällig. A stranger gets `help` and nothing else. The peer id is derived
   from the passkey, the grants are kept sealed. The app connects to the relay
   only while an app is paired, or when asked to under "Verbindungen": the relay
   sees the device's IP address.
