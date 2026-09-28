@@ -66,6 +66,21 @@ export function cosmosAddress(address, prefix) {
 }
 
 /**
+ * The issuer's crypto addresses as an invoice in `currency` shows them: only
+ * the one it is paid to, none on an invoice in euros. An address on an
+ * invoice that is not paid there only invites a payment in the wrong currency.
+ *
+ * @param {string} currency
+ * @param {Record<string, string> | undefined} crypto
+ * @returns {Record<string, string>}
+ */
+export function cryptoShown(currency, crypto) {
+	if (!Object.hasOwn(PAY_TO, currency)) return {};
+	const { key } = PAY_TO[currency];
+	return crypto?.[key] ? { [key]: crypto[key] } : {};
+}
+
+/**
  * The issuer's address for an invoice in `currency`, checked for that chain,
  * or null when there is none or it is not an address there.
  *

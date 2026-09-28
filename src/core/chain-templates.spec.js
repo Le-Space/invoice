@@ -6,21 +6,20 @@ import {
 	chainTemplate,
 	chainTemplateText
 } from './chain-templates.js';
+import { INVOICE_CURRENCIES } from './currency.js';
 import { documentModel } from './document.js';
 import { labelsFrom } from './labels.spec-helpers.js';
 import { paysOn } from './networks.js';
 import { parseTemplate } from './template.js';
 import { draftProblems, emptyDraft, emptyLine, issue } from './records.js';
 
-// Test vectors of BIP-173 and EIP-55, and Cosmos addresses made of zero bytes.
+// Test vectors of BIP-173 and EIP-55.
 const ISSUER = {
 	name: 'Wolkenfabrik Hosting UG',
 	address: 'Musterstraße 1\n12345 Musterstadt',
 	crypto: {
 		btc: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
-		eth: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
-		nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc',
-		akt: 'akash1qyqszqgpqyqszqgpqyqszqgpqyqszqgplgve5x'
+		eth: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed'
 	}
 };
 const CUSTOMER = {
@@ -40,25 +39,36 @@ describe('the chain templates', () => {
 			}
 		}
 	});
+
+	it('are for Bitcoin and Ethereum only, in currencies a new invoice is written in', () => {
+		expect(CHAIN_TEMPLATES.map((template) => template.id)).toEqual([
+			'bitcoin',
+			'ethereum',
+			'usdc-base'
+		]);
+		expect(chainTemplate('nym-node')).toBeNull();
+		expect(chainTemplate('akash-provider')).toBeNull();
+		for (const template of CHAIN_TEMPLATES) {
+			expect(INVOICE_CURRENCIES).toContain(template.currency);
+		}
+	});
 });
 
 describe('applyChainTemplate', () => {
-	it('sets currency, decimals and network, and the lines such an invoice has', () => {
-		const draft = applyChainTemplate(emptyDraft(), 'nym-node');
+	it('sets currency, decimals and network, and leaves the empty line as it was', () => {
+		const draft = applyChainTemplate(emptyDraft(), 'bitcoin');
 		expect(draft).toMatchObject({
-			currency: 'NYM',
-			decimals: 6,
-			network: 'nyx',
-			chainTemplate: 'nym-node'
+			currency: 'BTC',
+			decimals: 8,
+			network: 'bitcoin',
+			chainTemplate: 'bitcoin'
 		});
-		expect(draft.lines).toEqual([
-			expect.objectContaining({ description: 'Betrieb eines Nym-Knotens', unit: 'Monat' })
-		]);
-		expect(
-			applyChainTemplate(emptyDraft(), 'akash-provider', { language: 'en' }).lines[0]
-		).toMatchObject({
-			description: 'Compute provided through Akash',
-			unit: 'month'
+		// None of the templates suggests lines of its own.
+		expect(draft.lines).toEqual([expect.objectContaining({ description: '', unitPrice: '0' })]);
+		expect(applyChainTemplate(emptyDraft(), 'ethereum', { language: 'en' })).toMatchObject({
+			currency: 'ETH',
+			decimals: 8,
+			network: 'ethereum'
 		});
 	});
 
@@ -112,18 +122,18 @@ describe('an invoice made from a chain template', () => {
 
 	it('fills every placeholder in English too', () => {
 		const draft = {
-			...applyChainTemplate(emptyDraft({ issueDate: '2026-09-24' }), 'nym-node', {
+			...applyChainTemplate(emptyDraft({ issueDate: '2026-09-24' }), 'ethereum', {
 				language: 'en'
 			}),
 			customer: CUSTOMER,
 			taxMode: /** @type {const} */ ('kleinunternehmer')
 		};
-		draft.lines = [{ ...draft.lines[0], unitPrice: '12500000' }];
+		draft.lines = [{ ...draft.lines[0], description: 'Consulting', unitPrice: '12500000' }];
 		const invoice = issue(draft, {
 			number: '2026-00000-002',
 			issuer: ISSUER,
 			issuedBy: 'did',
-			template: chainTemplateText('nym-node', 'en')
+			template: chainTemplateText('ethereum', 'en')
 		});
 		expect(documentModel(invoice, labelsFrom(de)).missingPlaceholders).toEqual([]);
 	});

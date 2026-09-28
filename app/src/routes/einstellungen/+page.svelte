@@ -17,9 +17,7 @@
 	/** Which currency's address each field is checked as. */
 	const cryptoFields = /** @type {const} */ ([
 		['btc', 'BTC'],
-		['eth', 'ETH'],
-		['nym', 'NYM'],
-		['akt', 'AKT']
+		['eth', 'ETH']
 	]);
 
 	/** @param {string} key @param {string} currency */

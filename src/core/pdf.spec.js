@@ -23,9 +23,7 @@ const ISSUER = {
 	bank: { name: 'Testbank', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' },
 	crypto: {
 		btc: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
-		eth: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
-		nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc',
-		akt: 'akash1qyqszqgpqyqszqgpqyqszqgpqyqszqgplgve5x'
+		eth: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed'
 	},
 	register: {
 		court: 'Amtsgericht Musterstadt',
@@ -126,22 +124,35 @@ describe('invoicePdfBytes', () => {
 		expect(bytes.byteLength).toBeGreaterThan(1000);
 	});
 
-	it('prints an invoice in NYM, and one in Ether with all eighteen decimals', async () => {
-		const rate = { eurPerUnit: '0.0612', source: 'Kraken', date: '2026-09-24' };
+	it('prints an invoice in USDC, one in Ether with all eighteen decimals, and one in NYM of before', async () => {
+		const rate = { eurPerUnit: '0.9123', source: 'Kraken', date: '2026-09-24' };
+		/** @type {any[]} */
+		const invoices = [];
 		for (const [currency, unitPrice] of [
-			['NYM', '1500000'],
+			['USDC', '1500000'],
 			['ETH', '123456789']
 		]) {
 			const draft = {
 				...emptyDraft({ currency, issueDate: '2026-09-24' }),
 				eurRate: rate,
 				customer: invoice.customer,
-				lines: [emptyLine({ description: 'Mixnode-Betrieb', quantity: 3, unitPrice })]
+				lines: [emptyLine({ description: 'Serverbetrieb', quantity: 3, unitPrice })]
 			};
-			const bytes = await invoicePdfBytes(
-				issue(draft, { number: '2026-48213-002', issuer: ISSUER, issuedBy: 'did' }),
-				LABELS
-			);
+			invoices.push(issue(draft, { number: '2026-48213-002', issuer: ISSUER, issuedBy: 'did' }));
+		}
+		// Issued while NYM was still offered, with a NYM address frozen into its
+		// issuer (a Cosmos address made of zero bytes): it still prints.
+		invoices.push({
+			...invoices[0],
+			currency: 'NYM',
+			network: 'nyx',
+			issuer: {
+				...ISSUER,
+				crypto: { ...ISSUER.crypto, nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc' }
+			}
+		});
+		for (const issued of invoices) {
+			const bytes = await invoicePdfBytes(issued, LABELS);
 			expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe('%PDF-');
 		}
 	});

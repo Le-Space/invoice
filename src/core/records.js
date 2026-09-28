@@ -20,10 +20,10 @@
  * year's invoice must still show where they were when it was issued.
  */
 
-import { VAT_CURRENCY, currencyOf } from './currency.js';
+import { INVOICE_CURRENCIES, VAT_CURRENCY, currencyOf } from './currency.js';
 import { computeTotals, inEuroCents, parseRate, toUnits } from './money.js';
 import { CURRENCY_NETWORKS, defaultNetwork, paysOn } from './networks.js';
-import { PAY_TO, payToAddress } from './payment-code.js';
+import { PAY_TO, cryptoShown, payToAddress } from './payment-code.js';
 
 /**
  * Integer division rounding half away from zero, for rescaling a price.
@@ -251,6 +251,13 @@ export function draftProblems(draft, { issuer } = {}) {
 	// differ, and only decimals that are none are refused.
 	if (!currency || !Number.isInteger(draft.decimals) || draft.decimals < 0) {
 		problems.push({ code: 'invoice.problem.currency', field: 'currency' });
+	} else if (
+		!INVOICE_CURRENCIES.includes(currency.code) &&
+		!(/** @type {{ cancels?: string }} */ (draft).cancels)
+	) {
+		// Known, so that old invoices in it still read and can be cancelled
+		// (a Storno keeps the currency of what it cancels), but no new one.
+		problems.push({ code: 'invoice.problem.currencyRetired', field: 'currency' });
 	} else if (currency.code !== VAT_CURRENCY && showsVat(draft)) {
 		// Art. 230 MwStSystRL, §16 Abs. 6 UStG: the VAT is owed in euros, so an
 		// invoice in dollars or NYM has to say what its VAT is in euros — at the
@@ -478,7 +485,11 @@ export function issue(
 		number,
 		issuedAt,
 		issuedBy,
-		issuer: { ...issuer },
+		// Frozen with only the address this invoice is paid to (none in euros).
+		issuer: {
+			...issuer,
+			crypto: cryptoShown(draft.currency, /** @type {any} */ (issuer)?.crypto)
+		},
 		customer: { ...draft.customer },
 		// The wording is frozen with everything else: a template edited next
 		// year must not change what last year's invoice said.

@@ -138,16 +138,23 @@ describe('eurRateOf', () => {
 	});
 });
 
-describe('an invoice in NYM made from a transaction', () => {
+describe('an invoice in USDC made from a transaction', () => {
+	/** A made-up Belege booking: 12.5 USDC received on Base, valued at CoinGecko's rate. */
+	const usdcReceived = {
+		...received,
+		asset: 'USDC',
+		valuation: { ...received.valuation, rate: '0.9123' },
+		amountCents: 1140
+	};
 	const ISSUER = {
 		name: 'Wolkenfabrik Hosting UG',
 		address: 'Musterstraße 1\n12345 Musterstadt',
-		crypto: { nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc' }
+		crypto: { eth: '0x0000000000000000000000000000000000000001' }
 	};
 
 	it('can be issued with the booking’s rate, and prints where it came from', () => {
-		const draft = emptyDraft({ currency: 'NYM', issueDate: '2026-09-24' });
-		const made = lineFromTransaction(received, moneyUnit(draft), options);
+		const draft = { ...emptyDraft({ currency: 'USDC', issueDate: '2026-09-24' }), network: 'base' };
+		const made = lineFromTransaction(usdcReceived, moneyUnit(draft), options);
 		if (!('line' in made)) throw new Error(made.problem);
 		const ready = {
 			...draft,
@@ -157,7 +164,7 @@ describe('an invoice in NYM made from a transaction', () => {
 				vatId: ''
 			},
 			lines: [made.line],
-			eurRate: eurRateOf(received)
+			eurRate: eurRateOf(usdcReceived)
 		};
 		expect(draftProblems(ready, { issuer: ISSUER })).toEqual([]);
 
@@ -172,10 +179,10 @@ describe('an invoice in NYM made from a transaction', () => {
 		const model = documentModel(invoice, labels);
 		expect(model.rows[0]).toMatchObject({
 			unitPrice: '12,50',
-			subtitle: '12,5 NYM zu 0,0612 € je NYM (CoinGecko, 24.09.2026)',
+			subtitle: '12,5 USDC zu 0,9123 € je USDC (CoinGecko, 24.09.2026)',
 			details: [`Transaktion ${HASH}`]
 		});
-		// 19 % of 12.5 NYM = 2.375 NYM, at 0.0612 € = 0.14535 € → 0.15 €
-		expect(invoice.totals.taxInEuroCents).toBe('15');
+		// 19 % of 12.5 USDC = 2.375 USDC, at 0.9123 € = 2.1667125 € → 2.17 €
+		expect(invoice.totals.taxInEuroCents).toBe('217');
 	});
 });

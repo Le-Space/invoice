@@ -15,12 +15,13 @@ import {
 	totalsDisagree,
 	upgradeInvoice
 } from './records.js';
+import { INVOICE_CURRENCIES } from './currency.js';
 
 const ISSUER = {
 	name: 'Wolkenfabrik Hosting UG (haftungsbeschränkt)',
 	address: 'Musterstadt',
 	vatId: 'DE000000000',
-	crypto: { nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc' }
+	crypto: { eth: '0x0000000000000000000000000000000000000001' }
 };
 
 const codes = (/** @type {{ code: string }[]} */ problems) => problems.map((p) => p.code);
@@ -205,63 +206,64 @@ describe('foldCancellations', () => {
 });
 
 describe('an invoice in another currency', () => {
-	const RATE = { eurPerUnit: '0.0612', source: 'Kraken', date: '2026-09-24' };
-	/** 3 × 1.5 NYM at 19 % */
-	const nym = (/** @type {any} */ changes = {}) =>
+	const RATE = { eurPerUnit: '0.9123', source: 'Kraken', date: '2026-09-24' };
+	/** 3 × 1.5 USDC on Base at 19 % */
+	const usdc = (/** @type {any} */ changes = {}) =>
 		readyDraft({
-			...emptyDraft({ currency: 'NYM', issueDate: '2026-09-24' }),
+			...emptyDraft({ currency: 'USDC', issueDate: '2026-09-24' }),
+			network: 'base',
 			customer: { name: 'Stromwerk Test AG', address: 'Probehausen', vatId: '' },
-			lines: [emptyLine({ description: 'Mixnode-Betrieb', quantity: 3, unitPrice: '1500000' })],
+			lines: [emptyLine({ description: 'Serverbetrieb', quantity: 3, unitPrice: '1500000' })],
 			...changes
 		});
 
 	it('needs a euro rate once it shows VAT, because the VAT is owed in euros', () => {
-		expect(codes(draftProblems(nym(), { issuer: ISSUER }))).toEqual(['invoice.problem.eurRate']);
-		expect(draftProblems(nym({ eurRate: RATE }), { issuer: ISSUER })).toEqual([]);
+		expect(codes(draftProblems(usdc(), { issuer: ISSUER }))).toEqual(['invoice.problem.eurRate']);
+		expect(draftProblems(usdc({ eurRate: RATE }), { issuer: ISSUER })).toEqual([]);
 		expect(
-			codes(draftProblems(nym({ eurRate: { ...RATE, source: ' ' } }), { issuer: ISSUER }))
+			codes(draftProblems(usdc({ eurRate: { ...RATE, source: ' ' } }), { issuer: ISSUER }))
 		).toEqual(['invoice.problem.eurRate']);
 		expect(
-			codes(draftProblems(nym({ eurRate: { ...RATE, eurPerUnit: '0' } }), { issuer: ISSUER }))
+			codes(draftProblems(usdc({ eurRate: { ...RATE, eurPerUnit: '0' } }), { issuer: ISSUER }))
 		).toEqual(['invoice.problem.eurRate']);
 	});
 
 	it('needs no rate where it shows no VAT', () => {
 		const lines = [emptyLine({ description: 'Beratung', unitPrice: '10000', vatRate: 0 })];
-		expect(draftProblems(nym({ lines }), { issuer: ISSUER })).toEqual([]);
-		expect(draftProblems(nym({ taxMode: 'kleinunternehmer' }), { issuer: ISSUER })).toEqual([]);
+		expect(draftProblems(usdc({ lines }), { issuer: ISSUER })).toEqual([]);
+		expect(draftProblems(usdc({ taxMode: 'kleinunternehmer' }), { issuer: ISSUER })).toEqual([]);
 	});
 
 	it('needs an address to be paid to, valid on its chain', () => {
-		const withRate = nym({ eurRate: RATE });
+		const withRate = usdc({ eurRate: RATE });
 		expect(draftProblems(withRate, { issuer: ISSUER })).toEqual([]);
-		expect(codes(draftProblems(withRate, { issuer: { ...ISSUER, crypto: { nym: '' } } }))).toEqual([
+		expect(codes(draftProblems(withRate, { issuer: { ...ISSUER, crypto: { eth: '' } } }))).toEqual([
 			'invoice.problem.payAddress'
 		]);
-		// An Akash address is no NYM address.
+		// A Bitcoin address is no EVM address.
 		expect(
 			codes(
 				draftProblems(withRate, {
-					issuer: { ...ISSUER, crypto: { nym: 'akash1qyqszqgpqyqszqgpqyqszqgpqyqszqgplgve5x' } }
+					issuer: { ...ISSUER, crypto: { eth: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' } }
 				})
 			)
 		).toEqual(['invoice.problem.payAddress']);
 	});
 
 	it('names the network it is paid on, one its currency is on', () => {
-		expect(nym().network).toBe('nyx');
+		expect(usdc().network).toBe('base');
 		expect(
-			codes(draftProblems(nym({ eurRate: RATE, network: 'base' }), { issuer: ISSUER }))
+			codes(draftProblems(usdc({ eurRate: RATE, network: 'bitcoin' }), { issuer: ISSUER }))
 		).toEqual(['invoice.problem.network']);
 		// USDC is on several chains; switching to it picks the first, Ethereum.
-		const usdc = setCurrency(nym(), 'USDC');
-		expect(usdc.network).toBe('ethereum');
-		expect(setCurrency({ ...usdc, network: 'base' }, 'USDC').network).toBe('base');
-		expect(setCurrency(usdc, 'EUR').network).toBeNull();
+		const inUsdc = setCurrency(readyDraft(), 'USDC');
+		expect(inUsdc.network).toBe('ethereum');
+		expect(setCurrency(usdc(), 'USDC').network).toBe('base');
+		expect(setCurrency(inUsdc, 'EUR').network).toBeNull();
 	});
 
 	it('reads an invoice from before networks as paid on its currency’s first network', () => {
-		const { network, ...older } = nym({ currency: 'USDC', decimals: 6 });
+		const { network, ...older } = usdc();
 		expect(upgradeInvoice(older).network).toBe('ethereum');
 		expect(upgradeInvoice({ ...older, currency: 'EUR', decimals: 2 }).network).toBeNull();
 	});
@@ -272,87 +274,118 @@ describe('an invoice in another currency', () => {
 		]);
 	});
 
+	it('writes no new invoice in NYM or AKT, but still cancels one issued in them', () => {
+		expect(INVOICE_CURRENCIES).not.toContain('NYM');
+		expect(INVOICE_CURRENCIES).not.toContain('AKT');
+		expect(INVOICE_CURRENCIES).toEqual(expect.arrayContaining(['EUR', 'BTC', 'ETH', 'USDC']));
+		const inNym = usdc({ currency: 'NYM', network: 'nyx', eurRate: RATE });
+		const legacyIssuer = { ...ISSUER, crypto: { nym: 'n1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqp8hacc' } };
+		expect(codes(draftProblems(inNym, { issuer: legacyIssuer }))).toEqual([
+			'invoice.problem.currencyRetired'
+		]);
+		expect(codes(draftProblems({ ...inNym, currency: 'AKT', network: 'akash' }))).toContain(
+			'invoice.problem.currencyRetired'
+		);
+		expect(() =>
+			issue(inNym, { number: '2026-00000-001', issuer: legacyIssuer, issuedBy: 'did' })
+		).toThrow(/currencyRetired/);
+		// Issued while NYM was still offered (a record as it was stored then).
+		const issued = {
+			...inNym,
+			state: 'issued',
+			number: '2026-00000-001',
+			issuer: legacyIssuer,
+			issuedBy: 'did'
+		};
+		const storno = cancellationFor(issued, { issueDate: '2026-09-25' });
+		expect(storno.currency).toBe('NYM');
+		expect(storno.network).toBe('nyx');
+		expect(codes(draftProblems(storno, { issuer: ISSUER }))).not.toContain(
+			'invoice.problem.currencyRetired'
+		);
+	});
+
 	it('keeps its decimals on the record, and warns when the table has others now', () => {
-		expect(nym().decimals).toBe(6);
-		expect(draftWarnings(nym())).toEqual([]);
+		expect(usdc().decimals).toBe(6);
+		expect(draftWarnings(usdc())).toEqual([]);
 		// Written before the table changed: still openable, still issuable,
 		// read in its own decimals — and worth a second look.
-		const older = nym({ decimals: 4, eurRate: RATE });
+		const older = usdc({ decimals: 4, eurRate: RATE });
 		expect(draftProblems(older, { issuer: ISSUER })).toEqual([]);
 		expect(codes(draftWarnings(older))).toEqual(['invoice.warning.decimals']);
 		const invoice = issue(older, { number: '2026-00000-001', issuer: ISSUER, issuedBy: 'did' });
 		expect(invoice.decimals).toBe(4);
-		expect(codes(draftProblems(nym({ decimals: -1, eurRate: RATE }), { issuer: ISSUER }))).toEqual([
-			'invoice.problem.currency'
-		]);
+		expect(codes(draftProblems(usdc({ decimals: -1, eurRate: RATE }), { issuer: ISSUER }))).toEqual(
+			['invoice.problem.currency']
+		);
 	});
 
 	it('changes a draft’s currency with its decimals, keeping the figures it showed', () => {
 		const eur = readyDraft({
 			lines: [emptyLine({ description: 'Beratung', unitPrice: '150' })]
 		});
-		const inNym = setCurrency(eur, 'NYM');
-		expect(inNym).toMatchObject({ currency: 'NYM', decimals: 6 });
-		expect(inNym.lines[0].unitPrice).toBe('1500000');
-		// Back to euros: fewer decimals, rounded once; the rate goes, it was for NYM.
+		const inUsdc = setCurrency(eur, 'USDC');
+		expect(inUsdc).toMatchObject({ currency: 'USDC', decimals: 6 });
+		expect(inUsdc.lines[0].unitPrice).toBe('1500000');
+		// Back to euros: fewer decimals, rounded once; the rate goes, it was for USDC.
 		const back = setCurrency(
-			{ ...inNym, eurRate: RATE, lines: [{ ...inNym.lines[0], unitPrice: '1505000' }] },
+			{ ...inUsdc, eurRate: RATE, lines: [{ ...inUsdc.lines[0], unitPrice: '1505000' }] },
 			'EUR'
 		);
 		expect(back).toMatchObject({ currency: 'EUR', decimals: 2, eurRate: null });
 		expect(back.lines[0].unitPrice).toBe('151');
-		// NYM to dollars: the NYM rate says nothing about dollars.
-		expect(setCurrency({ ...inNym, eurRate: RATE }, 'USD').eurRate).toBeNull();
-		expect(setCurrency({ ...inNym, eurRate: RATE }, 'NYM').eurRate).toEqual(RATE);
+		// USDC to dollars: the USDC rate says nothing about dollars.
+		expect(setCurrency({ ...inUsdc, eurRate: RATE }, 'USD').eurRate).toBeNull();
+		expect(setCurrency({ ...inUsdc, eurRate: RATE }, 'USDC').eurRate).toEqual(RATE);
 		expect(() => setCurrency(eur, 'XYZ')).toThrow();
 	});
 
 	it('wants the rate of the month the service was rendered in', () => {
 		const lastMonth = { ...RATE, date: '2026-08-31' };
-		expect(codes(draftProblems(nym({ eurRate: lastMonth }), { issuer: ISSUER }))).toEqual([
+		expect(codes(draftProblems(usdc({ eurRate: lastMonth }), { issuer: ISSUER }))).toEqual([
 			'invoice.problem.eurRateMonth'
 		]);
 	});
 
 	it('reads an issued invoice in the decimals it was issued with', () => {
-		const invoice = issue(nym({ eurRate: RATE }), {
+		const invoice = issue(usdc({ eurRate: RATE }), {
 			number: '2026-00000-001',
 			issuer: ISSUER,
 			issuedBy: 'did'
 		});
 		expect(invoice.decimals).toBe(6);
 		// Were the table to change, the record still says 6.
-		expect(moneyUnit(invoice)).toEqual({ code: 'NYM', decimals: 6 });
-		expect(moneyUnit({ ...invoice, decimals: 3 })).toEqual({ code: 'NYM', decimals: 3 });
+		expect(moneyUnit(invoice)).toEqual({ code: 'USDC', decimals: 6 });
+		expect(moneyUnit({ ...invoice, decimals: 3 })).toEqual({ code: 'USDC', decimals: 3 });
 	});
 
 	it('freezes the currency, the rate and the VAT in euros when it is issued', () => {
-		const invoice = issue(nym({ eurRate: RATE }), {
+		const invoice = issue(usdc({ eurRate: RATE }), {
 			number: '2026-00000-001',
 			issuer: ISSUER,
 			issuedBy: 'did'
 		});
-		expect(invoice.currency).toBe('NYM');
+		expect(invoice.currency).toBe('USDC');
 		expect(invoice.eurRate).toEqual(RATE);
-		// 0.855 NYM VAT × 0.0612 €/NYM = 0.052326 € → 5 cents
+		// 0.855 USDC VAT × 0.9123 €/USDC = 0.7800165 € → 78 cents
 		expect(invoice.totals).toMatchObject({
 			net: '4500000',
 			tax: '855000',
 			gross: '5355000',
-			taxInEuroCents: '5'
+			taxInEuroCents: '78'
 		});
 	});
 
 	it('takes the currency and the rate into its Storno', () => {
-		const invoice = issue(nym({ eurRate: RATE }), {
+		const invoice = issue(usdc({ eurRate: RATE }), {
 			number: '2026-00000-001',
 			issuer: ISSUER,
 			issuedBy: 'did'
 		});
 		const storno = cancellationFor(invoice, { issueDate: '2026-09-25' });
-		expect(storno.currency).toBe('NYM');
+		expect(storno.currency).toBe('USDC');
 		expect(storno.decimals).toBe(6);
-		expect(storno.network).toBe('nyx');
+		expect(storno.network).toBe('base');
 		expect(storno.eurRate).toEqual(RATE);
 		expect(storno.lines[0]).toMatchObject({ quantity: -3, unitPrice: '1500000' });
 	});

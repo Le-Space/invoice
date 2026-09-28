@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cosmosAddress, cryptoPaymentCode, payToAddress } from './payment-code.js';
+import { cosmosAddress, cryptoPaymentCode, cryptoShown, payToAddress } from './payment-code.js';
 
 // Test vectors of BIP-173 and EIP-55, and Cosmos addresses made of zero bytes.
 const BTC = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -120,5 +120,20 @@ describe('cosmosAddress', () => {
 		expect(cosmosAddress(NYM.toUpperCase(), 'n')).toBe(NYM);
 		expect(cosmosAddress(NYM.replace('p8hacc', 'p8hacd'), 'n')).toBeNull();
 		expect(cosmosAddress('', 'n')).toBeNull();
+	});
+});
+
+describe('cryptoShown', () => {
+	const crypto = { btc: 'bc1-made-up', eth: '0x-made-up', nym: 'n1-made-up' };
+	it('keeps only the address an invoice in that currency is paid to', () => {
+		expect(cryptoShown('BTC', crypto)).toEqual({ btc: 'bc1-made-up' });
+		expect(cryptoShown('ETH', crypto)).toEqual({ eth: '0x-made-up' });
+		expect(cryptoShown('USDC', crypto)).toEqual({ eth: '0x-made-up' });
+		expect(cryptoShown('POL', crypto)).toEqual({ eth: '0x-made-up' });
+	});
+	it('shows none on an invoice in euros, or without that address', () => {
+		expect(cryptoShown('EUR', crypto)).toEqual({});
+		expect(cryptoShown('BTC', { eth: '0x-made-up' })).toEqual({});
+		expect(cryptoShown('BTC', undefined)).toEqual({});
 	});
 });
