@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import de from '../i18n/de.json';
-import { eurRateOf, lineFromTransaction, rateSourceName } from './crypto-lines.js';
+import {
+	cryptoLine,
+	cryptoSubtotals,
+	eurRateOf,
+	lineFromTransaction,
+	parseCryptoQuantity,
+	rateSourceName
+} from './crypto-lines.js';
 import { documentModel } from './document.js';
 import { documentLabels } from './labels.js';
 import { draftProblems, emptyDraft, issue, moneyUnit } from './records.js';
@@ -179,3 +186,131 @@ describe('an invoice in NYM made from a transaction', () => {
 		expect(invoice.totals.taxInEuroCents).toBe('15');
 	});
 });
+
+describe('a crypto line entered by hand', () => {
+	it('reads a quantity as it is typed', () => {
+		expect(parseCryptoQuantity('12,5')).toEqual({ units: '125', decimals: 1 });
+		expect(parseCryptoQuantity('0.0015')).toEqual({ units: '15', decimals: 4 });
+		expect(parseCryptoQuantity('1.000,25')).toEqual({ units: '100025', decimals: 2 });
+		expect(parseCryptoQuantity('1 000')).toEqual({ units: '1000', decimals: 0 });
+		for (const bad of ['', '0', '0,0', '-1', 'abc', '1,2,3'])
+			expect(parseCryptoQuantity(bad)).toBeNull();
+	});
+
+	it('prices quantity × rate in euros, and says so under the line', () => {
+		const result = cryptoLine(
+			{
+				asset: 'nym',
+				quantity: '12,5',
+				rate: '0,0612',
+				rateSource: 'coingecko',
+				rateAt: '2026-09-24',
+				hash: HASH
+			},
+			EUR,
+			options
+		);
+		if (!('line' in result)) throw new Error(result.problem);
+		// 12.5 × 0.0612 € = 0.765 € → 77 cents
+		expect(result.line).toMatchObject({
+			description: 'Mixnode-Betrieb September',
+			quantity: 1,
+			unitPrice: '77',
+			subtitle: '12,5 NYM zu 0,0612 € je NYM (CoinGecko, 24.09.2026)',
+			details: [`Transaktion ${HASH}`],
+			source: {
+				asset: 'NYM',
+				quantity: '125',
+				decimals: 1,
+				rate: '0.0612',
+				rateSource: 'coingecko',
+				rateAt: '2026-09-24'
+			}
+		});
+	});
+
+	it('refuses what is missing: asset, quantity, rate, its source or its day', () => {
+		const good = {
+			asset: 'AKT',
+			quantity: '3',
+			rate: '2,94',
+			rateSource: 'kraken',
+			rateAt: '2026-09-24'
+		};
+		expect('line' in cryptoLine(good, EUR, options)).toBe(true);
+		for (const change of [
+			{ asset: '' },
+			{ quantity: '0' },
+			{ rate: '' },
+			{ rateSource: ' ' },
+			{ rateAt: '24.09.2026' }
+		]) {
+			expect(cryptoLine({ ...good, ...change }, EUR, options)).toEqual({
+				problem: 'invoice.problem.cryptoTransaction'
+			});
+		}
+	});
+});
+
+describe('cryptoSubtotals', () => {
+	const nym = (/** @type {string} */ quantity, /** @type {number} */ decimals, net = '100') => ({
+		quantity: 1,
+		net,
+		source: { asset: 'NYM', quantity, decimals }
+	});
+
+	it('adds up each asset, on the finer scale, with what its lines come to', () => {
+		const sums = cryptoSubtotals([
+			nym('125', 1, '77'),
+			{ quantity: 1, net: '5000', description: 'Beratung' },
+			{ quantity: 2, net: '588', source: { asset: 'AKT', quantity: '1000000', decimals: 6 } },
+			nym('12500000', 6, '76')
+		]);
+		expect(sums).toEqual([
+			{ asset: 'NYM', quantity: '25', net: '153' },
+			{ asset: 'AKT', quantity: '2', net: '588' }
+		]);
+	});
+
+	it('leaves out a line in fractions of a unit: its crypto cannot be counted', () => {
+		expect(cryptoSubtotals([{ ...nym('125', 1), quantity: 1.5 }])).toEqual([]);
+		expect(cryptoSubtotals([])).toEqual([]);
+	});
+
+	it('shows up in the invoice’s totals, above the subtotal', () => {
+		const draft = {
+			...emptyDraft({ currency: 'EUR', issueDate: '2026-09-24' }),
+			deliveryDate: '2026-09-24',
+			customer: { name: 'Wolkenfabrik Hosting GmbH', address: 'Wolkenweg 1\n12345 Musterstadt' }
+		};
+		const a = cryptoLine(
+			{
+				asset: 'NYM',
+				quantity: '12,5',
+				rate: '0,0612',
+				rateSource: 'coingecko',
+				rateAt: '2026-09-24'
+			},
+			EUR,
+			options
+		);
+		const b = cryptoLine(
+			{ asset: 'AKT', quantity: '3', rate: '2,94', rateSource: 'kraken', rateAt: '2026-09-24' },
+			EUR,
+			{ ...options, description: 'Lease' }
+		);
+		if (!('line' in a) || !('line' in b)) throw new Error('no line');
+		const model = documentModel({ ...draft, lines: [a.line, b.line] }, documentLabels(key(de)));
+		expect(model.totals.slice(0, 3).map((t) => [t.label, t.value])).toEqual([
+			['davon 12,5 NYM', '0,77\u00a0€'],
+			['davon 3 AKT', '8,82\u00a0€'],
+			['Zwischensumme ohne USt.', '9,59\u00a0€']
+		]);
+	});
+});
+
+/** A translate function over the catalogue. @param {any} catalogue */
+function key(catalogue) {
+	return (/** @type {string} */ path) =>
+		path.split('.').reduce((node, part) => node?.[part], catalogue) ?? path;
+}

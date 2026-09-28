@@ -14,6 +14,7 @@
 	} from '@le-space/invoice/records';
 	import { formatAmount, formatMoney, parseAmount, parseQuantity } from '@le-space/invoice/money';
 	import { formatDay } from '@le-space/invoice/document';
+	import { RATE_SOURCES, cryptoLine, cryptoSubtotals } from '@le-space/invoice/crypto-lines';
 	import { documentLabels } from '@le-space/invoice/labels';
 	import { invoiceFileName, invoicePdfBytes } from '@le-space/invoice/pdf';
 	import { isEigenbeleg } from '@le-space/invoice/eigenbeleg';
@@ -106,6 +107,52 @@
 	function addLine() {
 		draft.lines.push(emptyLine());
 		priceText.push(formatAmount('0', unit));
+	}
+
+	const cryptoLabels = {
+		subtitle: t('invoice.cryptoLine.subtitle'),
+		transaction: t('invoice.cryptoLine.transaction')
+	};
+
+	/** A line of crypto: asset, quantity and rate typed in, the price in euros computed. */
+	function addCryptoLine() {
+		draft.lines.push({
+			...emptyLine(),
+			crypto: {
+				asset: '',
+				quantity: '',
+				rate: '',
+				rateSource: 'coingecko',
+				rateAt: draft.deliveryDate || today(),
+				hash: ''
+			}
+		});
+		priceText.push(formatAmount('0', unit));
+	}
+
+	/** Price a crypto line again from what was typed. @param {number} index */
+	function changeCrypto(index) {
+		const line = draft.lines[index];
+		const result = cryptoLine(line.crypto, unit, {
+			description: line.description,
+			vatRate: line.vatRate,
+			unit: line.unit,
+			labels: cryptoLabels
+		});
+		if ('line' in result) {
+			Object.assign(line, {
+				quantity: 1,
+				unitPrice: result.line.unitPrice,
+				subtitle: result.line.subtitle,
+				details: result.line.details,
+				source: result.line.source
+			});
+		} else {
+			// Not a line yet: no price, and the draft says what is missing.
+			Object.assign(line, { unitPrice: '0', subtitle: '', details: [] });
+			delete line.source;
+		}
+		priceText[index] = formatAmount(line.unitPrice, unit);
 	}
 
 	/** @param {number} index */
@@ -450,6 +497,7 @@
 						><span class={label}>{t('invoice.form.lineQuantity')}</span>
 						<input
 							class={input}
+							disabled={Boolean(line.crypto)}
 							value={String(line.quantity).replace('.', ',')}
 							oninput={(e) => changeQuantity(index, e.currentTarget.value)}
 							inputmode="decimal"
@@ -469,6 +517,7 @@
 								? 'border-danger'
 								: ''}"
 							value={priceText[index]}
+							readonly={Boolean(line.crypto)}
 							oninput={(e) => changePrice(index, e.currentTarget.value)}
 							inputmode="decimal"
 							data-testid="line-price"
@@ -490,11 +539,96 @@
 						onclick={() => removeLine(index)}
 						aria-label={t('invoice.form.removeLine')}>✕</button
 					>
+					{#if line.crypto}
+						<div
+							class="grid gap-2 sm:col-span-full sm:grid-cols-[6rem_8rem_8rem_10rem_10rem_1fr]"
+							data-testid="crypto-line"
+						>
+							<label class="text-sm"
+								><span class={label}>{t('invoice.app.editor.cryptoAsset')}</span>
+								<input
+									class={input}
+									bind:value={line.crypto.asset}
+									oninput={() => changeCrypto(index)}
+									placeholder="NYM"
+									data-testid="crypto-asset"
+								/></label
+							>
+							<label class="text-sm"
+								><span class={label}>{t('invoice.app.editor.cryptoQuantity')}</span>
+								<input
+									class={input}
+									bind:value={line.crypto.quantity}
+									oninput={() => changeCrypto(index)}
+									inputmode="decimal"
+									data-testid="crypto-quantity"
+								/></label
+							>
+							<label class="text-sm"
+								><span class={label}>{t('invoice.app.editor.cryptoRate')}</span>
+								<input
+									class={input}
+									bind:value={line.crypto.rate}
+									oninput={() => changeCrypto(index)}
+									inputmode="decimal"
+									data-testid="crypto-rate"
+								/></label
+							>
+							<label class="text-sm"
+								><span class={label}>{t('invoice.app.editor.rateSource')}</span>
+								<select
+									class={input}
+									bind:value={line.crypto.rateSource}
+									onchange={() => changeCrypto(index)}
+									data-testid="crypto-rate-source"
+								>
+									{#each Object.entries(RATE_SOURCES) as [code, name] (code)}
+										<option value={code}>{name}</option>
+									{/each}
+								</select></label
+							>
+							<label class="text-sm"
+								><span class={label}>{t('invoice.app.editor.rateDate')}</span>
+								<input
+									type="date"
+									class={input}
+									bind:value={line.crypto.rateAt}
+									onchange={() => changeCrypto(index)}
+									data-testid="crypto-rate-date"
+								/></label
+							>
+							<label class="text-sm"
+								><span class={label}>{t('invoice.app.editor.cryptoHash')}</span>
+								<input
+									class="{input} font-mono text-xs"
+									bind:value={line.crypto.hash}
+									oninput={() => changeCrypto(index)}
+									spellcheck="false"
+									data-testid="crypto-hash"
+								/></label
+							>
+							{#if line.subtitle}
+								<p class="text-xs text-faint sm:col-span-full" data-testid="crypto-subtitle">
+									{line.subtitle}
+								</p>
+							{/if}
+						</div>
+					{/if}
 				</div>
 			{/each}
-			<button type="button" class={secondary} onclick={addLine} data-testid="add-line"
-				>{t('invoice.form.addLine')}</button
-			>
+			<div class="flex flex-wrap gap-2">
+				<button type="button" class={secondary} onclick={addLine} data-testid="add-line"
+					>{t('invoice.form.addLine')}</button
+				>
+				{#if draft.currency === 'EUR'}
+					<button
+						type="button"
+						class={secondary}
+						onclick={addCryptoLine}
+						data-testid="add-crypto-line">{t('invoice.app.editor.addCryptoLine')}</button
+					>
+				{/if}
+			</div>
 		</fieldset>
 
 		<label class="block text-sm"
@@ -503,6 +637,12 @@
 		>
 
 		{#if totals}
+			{#each cryptoSubtotals(totals.lines) as sum (sum.asset)}
+				<p class="text-right text-sm text-faint" data-testid="crypto-subtotal">
+					{t('invoice.document.cryptoSubtotal', { quantity: sum.quantity, asset: sum.asset })}:
+					<span class="font-mono">{formatMoney(sum.net, unit)}</span>
+				</p>
+			{/each}
 			<p class="text-right text-sm text-heading" data-testid="draft-due">
 				{t('invoice.app.editor.due')}:
 				<span class="font-mono font-semibold">{formatMoney(totals.due, unit)}</span>
