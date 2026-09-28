@@ -147,6 +147,18 @@ export function invoiceCommands({ store, settings, t, now = () => new Date(), gr
 		return record;
 	}
 
+	/** Eigenbelege are made one after another, so no two get the same number. */
+	let making = Promise.resolve();
+	/** @template T @param {() => Promise<T>} work @returns {Promise<T>} */
+	function oneEigenbelegAtATime(work) {
+		const run = making.then(work, work);
+		making = run.then(
+			() => {},
+			() => {}
+		);
+		return run;
+	}
+
 	/**
 	 * Every issued invoice — a Storno too, which is an invoice of its own —
 	 * upgraded, with `cancelledBy` folded in. Never a draft, never an
@@ -250,6 +262,12 @@ export function invoiceCommands({ store, settings, t, now = () => new Date(), gr
 		return run;
 	}
 
+	/** What `create-eigenbeleg` answers about a stored Eigenbeleg. @param {any} record */
+	async function made(record) {
+		const { meta } = await eigenbelegFile(record, t);
+		return { documentId: record.id, number: record.number, state: 'created', file: meta };
+	}
+
 	/** @param {string} field */
 	const invalid = (field, why = 'invalid') =>
 		new UcepError('INVALID_ARGUMENTS', `${field}: ${why}`);
@@ -299,7 +317,7 @@ export function invoiceCommands({ store, settings, t, now = () => new Date(), gr
 			idempotent: true,
 			description: t('ucep.commands.createEigenbeleg'),
 			/** @param {any} ctx */
-			async handler({ argsJson, grant, peerId }) {
+			async handler({ argsJson, grant, peerId, requestId }) {
 				const problems = eigenbelegProblems(argsJson);
 				if (problems.length > 0) {
 					throw new UcepError('INVALID_ARGUMENTS', `${problems[0].field}: ${problems[0].code}`);
@@ -309,21 +327,30 @@ export function invoiceCommands({ store, settings, t, now = () => new Date(), gr
 					// The app's human has not said who issues: nothing to put on the page.
 					throw new UcepError('UNAVAILABLE', 'The invoicing app has no issuer yet.');
 				}
-				const at = now();
-				const all = await store.invoices.list({ includeDeleted: true });
-				const number = nextEigenbelegNumber(
-					all.filter(isEigenbeleg).map((record) => record.number),
-					String(at.getFullYear())
-				);
-				const record = createEigenbeleg(argsJson, {
-					number,
-					issuer,
-					requestedBy: { label: grant?.label ?? '', did: grant?.did || null, peerId },
-					createdAt: at.toISOString()
+				return oneEigenbelegAtATime(async () => {
+					const all = await store.invoices.list({ includeDeleted: true });
+					// Asked before under this grant (a retry, also after a reload): that one.
+					const earlier = all.find(
+						(r) =>
+							isEigenbeleg(r) &&
+							!r.deleted &&
+							r.grantId === grant?.grantId &&
+							r.requestId === requestId
+					);
+					if (earlier) return made(earlier);
+					const at = now();
+					const number = nextEigenbelegNumber(
+						all.filter(isEigenbeleg).map((record) => record.number),
+						String(at.getFullYear())
+					);
+					const record = createEigenbeleg(argsJson, {
+						number,
+						issuer,
+						requestedBy: { label: grant?.label ?? '', did: grant?.did || null, peerId },
+						createdAt: at.toISOString()
+					});
+					return made(await store.invoices.put({ ...record, grantId: grant?.grantId, requestId }));
 				});
-				const stored = await store.invoices.put({ ...record, grantId: grant?.grantId });
-				const { meta } = await eigenbelegFile(stored, t);
-				return { documentId: stored.id, number, state: 'created', file: meta };
 			}
 		},
 
