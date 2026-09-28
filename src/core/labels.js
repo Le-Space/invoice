@@ -24,6 +24,7 @@ export const DOCUMENT_LABEL_KEYS = [
 	'vat',
 	'lineNet',
 	'subtotal',
+	'cryptoSubtotal',
 	'vatOf',
 	'totalCurrency',
 	'amountDue',

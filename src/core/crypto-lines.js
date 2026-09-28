@@ -118,6 +118,15 @@ function unitsText(units, decimals) {
 	return `${grouping.format(units / divisor)}${trimmed ? `,${trimmed}` : ''}`;
 }
 
+/**
+ * The quantity a line's `source` keeps, as it is written on the invoice.
+ *
+ * @param {{ quantity: string, decimals: number }} source
+ */
+export function sourceQuantityText(source) {
+	return unitsText(abs(BigInt(source.quantity)), source.decimals);
+}
+
 /** @param {string} source */
 export function rateSourceName(source) {
 	return Object.hasOwn(RATE_SOURCES, source)
@@ -227,4 +236,111 @@ export function lineFromTransaction(
 			}
 		}
 	};
+}
+
+/**
+ * A quantity as somebody types it — "12,5", "0.0015", "1.000,25" — as the
+ * integer of its smallest written digit and the number of digits after the
+ * comma: `{ units: '125', decimals: 1 }`. Null for anything that is not a
+ * positive quantity.
+ *
+ * @param {unknown} text
+ * @returns {{ units: string, decimals: number } | null}
+ */
+export function parseCryptoQuantity(text) {
+	let value = String(text ?? '')
+		.trim()
+		.replace(/\s/g, '');
+	// German grouping dots before a comma: "1.000,25".
+	if (value.includes(',')) value = value.replace(/\./g, '').replace(',', '.');
+	const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
+	if (!match) return null;
+	const fraction = match[2] ?? '';
+	const units = BigInt(`${match[1]}${fraction}`);
+	if (units === 0n) return null;
+	return { units: units.toString(), decimals: fraction.length };
+}
+
+/**
+ * An invoice line for crypto the person enters by hand: the asset, how much,
+ * and what one unit was worth in euros, by whose account and on which day.
+ * The same line `lineFromTransaction` makes from a Belege booking, priced at
+ * quantity × rate, rounded once to the cent.
+ *
+ * @param {{
+ *   asset: string,
+ *   quantity: string,
+ *   rate: string,
+ *   rateSource: string,
+ *   rateAt: string,
+ *   hash?: string
+ * }} input the quantity and the rate as typed ("12,5", "0,0612"); `rateAt` YYYY-MM-DD
+ * @param {{ code: string, decimals: number }} unit the invoice's `moneyUnit`
+ * @param {Parameters<typeof lineFromTransaction>[2]} options
+ */
+export function cryptoLine(input, unit, options) {
+	const asset = String(input?.asset ?? '')
+		.trim()
+		.toUpperCase();
+	const quantity = parseCryptoQuantity(input?.quantity);
+	let rate = String(input?.rate ?? '').trim();
+	// "1.234,56" German, "0.0612" as a rate source writes it.
+	if (rate.includes(',')) rate = rate.replace(/\./g, '').replace(',', '.');
+	const at = String(input?.rateAt ?? '').trim();
+	if (
+		!/^[A-Z0-9.-]{1,12}$/.test(asset) ||
+		!quantity ||
+		!/^\d{4}-\d{2}-\d{2}$/.test(at) ||
+		!String(input?.rateSource ?? '').trim()
+	) {
+		return { problem: 'invoice.problem.cryptoTransaction' };
+	}
+	const hash = String(input?.hash ?? '').trim();
+	return lineFromTransaction(
+		{
+			asset,
+			quantity: quantity.units,
+			decimals: quantity.decimals,
+			valuation: { rate, currency: 'EUR', source: String(input.rateSource).trim(), at },
+			...(hash ? { chainTxRef: hash } : {})
+		},
+		unit,
+		options
+	);
+}
+
+/**
+ * What a line carries of crypto, per asset, for the invoice's subtotals: how
+ * much in all, and what those lines come to in the invoice's currency. A
+ * line's crypto counts as often as its quantity says, when that is a whole
+ * number; a line in fractions of a unit has no crypto quantity to add up.
+ *
+ * @param {{ source?: any, quantity: number, net: string }[]} lines with `net`, as `invoiceTotals` gives them
+ * @returns {{ asset: string, quantity: string, net: string }[]} in the order the assets first appear;
+ *   `quantity` in whole units, German style ("25,5")
+ */
+export function cryptoSubtotals(lines) {
+	/** @type {Map<string, { units: bigint, decimals: number, net: bigint }>} */
+	const sums = new Map();
+	for (const line of lines ?? []) {
+		const source = line?.source;
+		if (!source || typeof source.asset !== 'string' || !Number.isInteger(line.quantity)) continue;
+		if (toUnits(source.quantity) === null || !Number.isInteger(source.decimals)) continue;
+		const units = abs(BigInt(source.quantity)) * BigInt(line.quantity);
+		const kept = sums.get(source.asset) ?? { units: 0n, decimals: source.decimals, net: 0n };
+		// Both on the finer of the two scales, so nothing is rounded away.
+		const decimals = Math.max(kept.decimals, source.decimals);
+		sums.set(source.asset, {
+			units:
+				kept.units * 10n ** BigInt(decimals - kept.decimals) +
+				units * 10n ** BigInt(decimals - source.decimals),
+			decimals,
+			net: kept.net + BigInt(line.net)
+		});
+	}
+	return [...sums].map(([asset, sum]) => ({
+		asset,
+		quantity: unitsText(sum.units, sum.decimals),
+		net: sum.net.toString()
+	}));
 }

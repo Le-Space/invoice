@@ -11,6 +11,7 @@
  * carries its own copy of the addresses and totals.
  */
 
+import { cryptoSubtotals } from './crypto-lines.js';
 import { giroCodePayload, remittanceFor } from './girocode.js';
 import { cryptoPaymentCode, cryptoShown } from './payment-code.js';
 import { fillPlaceholders, parseTemplate, renderBlock, templateContext } from './template.js';
@@ -258,7 +259,15 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 		// The rows stay plain and the note names the currency once, as the
 		// template does; the sum carries the sign, because that is the figure
 		// somebody looks for.
-		totals: [
+		totals: /** @type {{ label: string, value: string, strong?: boolean, due?: boolean }[]} */ ([
+			// Lines of crypto, summed per asset: how much of it, and what those
+			// lines come to — above the subtotal they are part of.
+			...cryptoSubtotals(totals.lines).map((sum) => ({
+				label: (labels.cryptoSubtotal ?? '')
+					.replace('{quantity}', sum.quantity)
+					.replaceAll('{asset}', sum.asset),
+				value: money(sum.net)
+			})),
 			{ label: labels.subtotal, value: money(totals.net) },
 			...(invoice.taxMode === 'standard'
 				? totals.vatBreakdown.map((group) => ({
@@ -275,7 +284,7 @@ export function documentModel(invoice, labels, { locale = 'de-DE' } = {}) {
 			...(taxInEuroCents === null
 				? []
 				: [{ label: labels.vatInEuro, value: formatMoney(taxInEuroCents, VAT_CURRENCY) }])
-		],
+		]),
 		/** The rate the VAT in euros was taken at, by whose account and on which day. */
 		rateNote:
 			taxInEuroCents === null

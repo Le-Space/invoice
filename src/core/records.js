@@ -83,8 +83,14 @@ export const INVOICE_PREFIX = 'invoice/';
  *   quantity: number,
  *   unit: string,
  *   unitPrice: string,
- *   vatRate: number
+ *   vatRate: number,
+ *   source?: import('./crypto-lines.js').LineSource,
+ *   crypto?: { asset: string, quantity: string, rate: string, rateSource: string, rateAt: string, hash?: string }
  * }} InvoiceLine
+ *
+ * A line of crypto keeps what it was made of in `source` (crypto-lines.js):
+ * the asset, the quantity, the rate. One entered by hand also keeps what was
+ * typed in `crypto`, so the editor shows it again.
  *
  * `unitPrice` is net, in the smallest unit of the invoice's currency, as an
  * integer in a string (`money.js`).
@@ -231,6 +237,11 @@ export function draftProblems(draft, { issuer } = {}) {
 		problems.push({ code: 'invoice.problem.noLines', field: 'lines' });
 	}
 	lines.forEach((line, index) => {
+		// A crypto line entered by hand (`crypto` the typed input) is priced
+		// only once asset, quantity and rate make one (`source`).
+		if (line?.crypto && !line.source) {
+			problems.push({ code: 'invoice.problem.cryptoLine', field: 'crypto', line: index });
+		}
 		if (!text(line?.description)) {
 			problems.push({ code: 'invoice.problem.lineDescription', field: 'description', line: index });
 		}
