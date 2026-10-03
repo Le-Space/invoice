@@ -71,9 +71,13 @@ it with, in German or English.
 ## The app
 
 `app/` is a PWA (SvelteKit 2, Svelte 5) on the core. A passkey opens it: its
-PRF answer derives the key every OrbitDB database is sealed with, and the
-OrbitDB signing key, so nothing is readable on disk and no private key is kept
-(`app/src/lib/node.js`, `database-keys.js`, `session-identities.js`). The
+PRF answer opens the books' vault, which holds the key every OrbitDB database
+is sealed with, the database names and the UCEP peer seed — on first use the
+values this passkey derives — and derives the OrbitDB signing key. Nothing is
+readable on disk and no private key is kept (`app/src/lib/node.js`,
+`books-vault.js`, `database-keys.js`, `session-identities.js`). The vault gives
+each passkey a slot of its own, which is how a second security key will open
+the same books. The
 session and store layer comes from Le-Space/belege, where its author wrote it,
 and is published here under MIT.
 
@@ -94,8 +98,8 @@ and is published here under MIT.
   (`get-pdf`). Since extension 0.2.0 it also lists the issued invoices
   (`list-issued`, with their PDFs by `get-pdf`) and reports which were paid
   (`record-payment`); the list and the invoice then say bezahlt, teilweise
-  bezahlt, offen or überfällig. A stranger gets `help` and nothing else. The peer id is derived
-  from the passkey, the grants are kept sealed. The app connects to the relay
+  bezahlt, offen or überfällig. A stranger gets `help` and nothing else. The peer id comes from
+  the books' vault, the grants are kept sealed. The app connects to the relay
   only while an app is paired, or when asked to under "Verbindungen": the relay
   sees the device's IP address.
 

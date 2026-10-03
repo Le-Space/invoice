@@ -73,6 +73,10 @@ function releaseName() {
 }
 
 export default defineConfig({
+	// The books live in this origin's storage, and the passkey is bound to its
+	// host: on another port the app finds neither and offers to start new books.
+	// So the dev server refuses a taken port instead of moving to the next one.
+	server: { port: 5173, strictPort: true },
 	test: {
 		include: ['src/**/*.spec.js'],
 		environment: 'node',

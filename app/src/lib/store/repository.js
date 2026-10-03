@@ -17,7 +17,6 @@
 // is no code path that opens one in plaintext.
 
 import { payloadEncryption } from '../entry-encryption.js';
-import { deriveDatabaseName } from '../database-keys.js';
 import { ulid, isUlid } from './ids.js';
 import SealedDocuments from './sealed-documents.js';
 
@@ -123,14 +122,20 @@ export function createCollection(db, name, { author, now = () => new Date() }) {
  *
  * @param {object} params
  * @param {any} params.orbitdb a started OrbitDB instance
- * @param {Uint8Array} params.encryptionKey 32 bytes from `deriveDatabaseKey`
- * @param {Uint8Array} params.prfOutput names the databases, see `deriveDatabaseName`
+ * @param {Uint8Array} params.encryptionKey 32 bytes, from the books' vault (books-vault.js)
+ * @param {Record<CollectionName, string>} params.names the OrbitDB name of each collection,
+ *   from the books' vault (books-vault.js)
  * @param {Record<string, any>} [params.openOptions] extra `orbitdb.open` options (tests pass memory storages)
  * @returns {Promise<{ invoices: Collection, customers: Collection, settings: Collection, close: () => Promise<void> }>}
  */
-export async function openStore({ orbitdb, encryptionKey, prfOutput, openOptions = {} }) {
+export async function openStore({ orbitdb, encryptionKey, names, openOptions = {} }) {
 	if (!(encryptionKey instanceof Uint8Array) || encryptionKey.length !== 32) {
 		throw new Error('The store cannot be opened without its 32-byte encryption key.');
+	}
+	for (const name of COLLECTIONS) {
+		if (typeof names?.[name] !== 'string' || names[name].length === 0) {
+			throw new Error(`The store cannot be opened without a name for ${name}.`);
+		}
 	}
 	const author = orbitdb.identity.id;
 	const encryption = await payloadEncryption(encryptionKey);
@@ -140,7 +145,7 @@ export async function openStore({ orbitdb, encryptionKey, prfOutput, openOptions
 	/** @type {Record<string, Collection>} */
 	const collections = {};
 	for (const name of COLLECTIONS) {
-		dbs[name] = await orbitdb.open(await deriveDatabaseName(prfOutput, name), {
+		dbs[name] = await orbitdb.open(names[name], {
 			type: SealedDocuments.type,
 			Database: SealedDocuments({ indexBy: 'id' }),
 			encryption,

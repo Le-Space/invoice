@@ -247,7 +247,8 @@ function installE2EHooks() {
 				? {
 						signingKey: hex(s.signingKey),
 						databaseKey: hex(s.databaseKey),
-						peerKey: hex(s.peerKey)
+						peerKey: hex(s.peerKey),
+						ucepSeed: hex(s.ucepSeed)
 					}
 				: null;
 		}
