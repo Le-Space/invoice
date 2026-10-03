@@ -4,6 +4,7 @@
 	import { t } from '$lib/i18n/index.js';
 	import { app, currentStore } from '$lib/session.svelte.js';
 	import { saveSettings } from '$lib/invoices.js';
+	import KeysSection from '$lib/KeysSection.svelte';
 
 	/** A copy of the settings, written back on "Speichern". @type {any} */
 	let form = $state(null);
@@ -233,3 +234,7 @@
 		</div>
 	</section>
 {/if}
+
+<div class="mt-8">
+	<KeysSection />
+</div>

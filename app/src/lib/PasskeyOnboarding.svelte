@@ -10,9 +10,13 @@
 	// apps/escrow01 at f0d3df4: a card on the brand tokens, one coral action.
 	import { app, createPasskey, restorePasskey, unlockStoredPasskey } from './session.svelte.js';
 	import { hasStoredPasskeyCredential } from './passkey-identity.js';
+	import { listStoredPasskeys } from './stored-passkeys.js';
 	import { t } from './i18n/index.js';
 
 	const hasStoredPasskey = hasStoredPasskeyCredential();
+	// More than one when a second key was added to the books: any of them opens.
+	const storedPasskeys = listStoredPasskeys();
+	let chosen = $state(storedPasskeys[0]?.credentialId ?? '');
 	let label = $state('');
 	let busy = $derived(app.status === 'starting');
 
@@ -30,11 +34,26 @@
 	<p class="mt-2 text-sm leading-relaxed text-text">{t('onboarding.intro')}</p>
 
 	{#if hasStoredPasskey}
+		{#if storedPasskeys.length > 1}
+			<label class="mt-6 block text-sm font-medium text-heading" for="passkey-choice"
+				>{t('onboarding.choose')}</label
+			>
+			<select
+				id="passkey-choice"
+				class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+				bind:value={chosen}
+				data-testid="passkey-choice"
+			>
+				{#each storedPasskeys as passkey (passkey.credentialId)}
+					<option value={passkey.credentialId}>{passkey.label}</option>
+				{/each}
+			</select>
+		{/if}
 		<button
 			type="button"
 			class="mt-6 {primary}"
 			disabled={busy}
-			onclick={unlockStoredPasskey}
+			onclick={() => unlockStoredPasskey(chosen || undefined)}
 			data-testid="passkey-unlock"
 		>
 			{t('onboarding.unlock')}

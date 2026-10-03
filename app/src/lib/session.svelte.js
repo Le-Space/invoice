@@ -7,8 +7,18 @@
 import {
 	createPasskeyCredential,
 	loadStoredPasskeyCredential,
+	readPrfOutput,
 	restorePasskeyCredential
 } from './passkey-identity.js';
+import { WebAuthnDIDProvider, slotIdFor } from '@le-space/orbitdb-identity-provider-webauthn-did';
+import { addBooksSlot, booksSlotIds, removeBooksSlot } from './books-vault.js';
+import {
+	forgetPasskey,
+	keepDefaultAside,
+	listStoredPasskeys,
+	makeDefaultPasskey,
+	rememberPasskey
+} from './stored-passkeys.js';
 import { getSetting } from './store/settings.js';
 import { normaliseInvoiceSettings } from '@le-space/invoice/settings';
 import { foldCancellations, upgradeInvoice } from '@le-space/invoice/records';
@@ -29,6 +39,16 @@ export const app = $state({
 	did: null,
 	/** @type {any[]} every invoice, upgraded, with `cancelledBy` folded in; newest first */
 	invoices: [],
+	/**
+	 * The passkeys that open these books: one per slot in the vault, labelled
+	 * from what this browser keeps. `current` unlocked this session.
+	 * @type {{ credentialId: string | null, label: string | null, current: boolean }[]}
+	 */
+	keys: [],
+	/** @type {'idle' | 'adding' | 'removing'} */
+	keysStatus: 'idle',
+	/** @type {string | null} */
+	keysError: null,
 	/** @type {StoredRecord[]} */
 	customers: [],
 	/** @type {ReturnType<typeof normaliseInvoiceSettings> | null} */
@@ -134,6 +154,94 @@ export function currentStore() {
 	return session?.store ?? null;
 }
 
+/**
+ * The vault's slots, each named after the passkey this browser keeps for it.
+ * A slot whose passkey is kept nowhere here still counts, without a name.
+ */
+async function refreshKeys() {
+	if (!session) {
+		app.keys = [];
+		return;
+	}
+	const stored = listStoredPasskeys();
+	/** @type {Record<string, { credentialId: string, label: string }>} */
+	const byKid = {};
+	for (const passkey of stored) {
+		byKid[await slotIdFor(passkey.credential.rawCredentialId)] = passkey;
+	}
+	app.keys = booksSlotIds(session.vault).map((kid) => {
+		const passkey = byKid[kid];
+		return {
+			credentialId: passkey?.credentialId ?? null,
+			label: passkey?.label ?? null,
+			current: passkey?.credentialId === session?.credentialId
+		};
+	});
+}
+
+/** @param {unknown} error */
+const message = (error) => (error instanceof Error ? error.message : String(error));
+
+/**
+ * One more passkey for these books — a second security key, say. Two
+ * ceremonies on the new key: creating it, and the PRF answer its slot is
+ * sealed with. The books stay open throughout.
+ *
+ * @param {string} label shown in the passkey picker and in the list
+ */
+export async function addKey(label) {
+	if (!session || app.keysStatus !== 'idle') return;
+	app.keysStatus = 'adding';
+	app.keysError = null;
+	try {
+		const name = label.trim() || t('keys.defaultLabel');
+		const credential = await WebAuthnDIDProvider.createCredential({
+			userId: `invoice-${crypto.randomUUID()}`,
+			displayName: name
+		});
+		const prfOutput = await readPrfOutput(credential);
+		session.vault = await addBooksSlot(session.vault, {
+			prfOutput,
+			rawCredentialId: credential.rawCredentialId
+		});
+		rememberPasskey(credential, name);
+		await refreshKeys();
+	} catch (error) {
+		console.error('adding a key failed:', error);
+		app.keysError = message(error);
+	} finally {
+		app.keysStatus = 'idle';
+	}
+}
+
+/**
+ * A passkey no longer opens these books. Not the last one, and not the one
+ * that unlocked them now: nobody can lock themselves out here.
+ *
+ * @param {string} credentialId
+ */
+export async function removeKey(credentialId) {
+	if (!session || app.keysStatus !== 'idle') return;
+	if (credentialId === session.credentialId) {
+		app.keysError = t('keys.notCurrent');
+		return;
+	}
+	const passkey = listStoredPasskeys().find((p) => p.credentialId === credentialId);
+	if (!passkey) return;
+	app.keysStatus = 'removing';
+	app.keysError = null;
+	try {
+		session.vault = await removeBooksSlot(session.vault, passkey.credential.rawCredentialId);
+		forgetPasskey(credentialId);
+		await refreshKeys();
+	} catch (error) {
+		console.error('removing a key failed:', error);
+		app.keysError = message(error);
+	} finally {
+		app.keysStatus = 'idle';
+	}
+}
+
 export async function refresh() {
 	if (!session || !app.did) return;
 	const [invoices, customers, stored] = await Promise.all([
@@ -165,6 +273,9 @@ async function unlockWith(credential) {
 	const { startSession } = await import('./node.js');
 	session = await startSession(credential);
 	app.did = session.did;
+	// The passkey that unlocked is the one the button uses next time.
+	makeDefaultPasskey(session.credentialId);
+	await refreshKeys();
 	for (const name of /** @type {const} */ (['invoices', 'customers', 'settings'])) {
 		session.store[name].onChange(scheduleRefresh);
 	}
@@ -196,18 +307,30 @@ async function run(getCredential, nothingFound) {
 /** @param {string} label shown in the passkey picker; identifies nothing */
 export function createPasskey(label) {
 	const name = label.trim() || 'Le Space Rechnungen';
-	return run(
-		() => createPasskeyCredential({ userId: `invoice-${crypto.randomUUID()}`, displayName: name }),
-		t('onboarding.createFailed')
-	);
+	return run(() => {
+		keepDefaultAside();
+		return createPasskeyCredential({ userId: `invoice-${crypto.randomUUID()}`, displayName: name });
+	}, t('onboarding.createFailed'));
 }
 
 export function restorePasskey() {
-	return run(() => restorePasskeyCredential(), t('onboarding.restoreFailed'));
+	return run(() => {
+		keepDefaultAside();
+		return restorePasskeyCredential();
+	}, t('onboarding.restoreFailed'));
 }
 
-export function unlockStoredPasskey() {
-	return run(async () => loadStoredPasskeyCredential(), t('onboarding.unlockFailed'));
+/**
+ * @param {string} [credentialId] one of `listStoredPasskeys()`; the default when omitted
+ */
+export function unlockStoredPasskey(credentialId) {
+	return run(
+		async () =>
+			credentialId
+				? (listStoredPasskeys().find((p) => p.credentialId === credentialId)?.credential ?? null)
+				: loadStoredPasskeyCredential(),
+		t('onboarding.unlockFailed')
+	);
 }
 
 /** Close the store and forget the session: the keys go with it. */
@@ -224,6 +347,8 @@ export async function lock() {
 	app.invoices = [];
 	app.customers = [];
 	app.settings = null;
+	app.keys = [];
+	app.keysError = null;
 	await closing?.stop();
 }
 
