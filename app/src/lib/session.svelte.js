@@ -238,6 +238,7 @@ function installE2EHooks() {
 	/** @type {any} */ (window).__invoiceE2E = {
 		did: () => app.did,
 		identityHash: () => session?.identityHash,
+		booksDid: () => session?.booksDid,
 		peerId: () => session?.peerId,
 		ucepPeerId: () => app.ucep.peerId,
 		ucepOnline: () => app.ucep.online,
@@ -245,10 +246,10 @@ function installE2EHooks() {
 			const s = session?.secretsForE2E;
 			return s
 				? {
-						signingKey: hex(s.signingKey),
 						databaseKey: hex(s.databaseKey),
 						peerKey: hex(s.peerKey),
-						ucepSeed: hex(s.ucepSeed)
+						ucepSeed: hex(s.ucepSeed),
+						booksSecret: hex(s.booksSecret)
 					}
 				: null;
 		}

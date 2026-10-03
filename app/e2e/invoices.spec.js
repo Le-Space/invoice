@@ -20,10 +20,12 @@ test('a USDC invoice from a template, issued, printed and sealed', async ({ page
 	await expect(didBadge).toBeVisible();
 	const did = await didBadge.getAttribute('data-did');
 	expect(did).toMatch(/^did:key:/);
+	// Two ceremonies: the passkey made, then one PRF read that opens the vault.
+	// There used to be a third, the passkey signing its OrbitDB identity
+	// document; the books now sign as their own identity, which asks no passkey.
 	expect((await takeCeremonies(page)).map((c) => [c.kind, c.prf])).toEqual([
 		['create', true],
-		['get', true],
-		['get', false]
+		['get', true]
 	]);
 	await expect(page.getByTestId('empty')).toBeVisible();
 
@@ -95,17 +97,21 @@ test('a USDC invoice from a template, issued, printed and sealed', async ({ page
 	const { text } = await everythingStoredAsText(page);
 	expect(text).not.toContain(customer);
 	expect(text).not.toContain('Serverbetrieb');
-	for (const key of [secrets.signingKey, secrets.databaseKey, secrets.ucepSeed]) {
+	for (const key of [secrets.databaseKey, secrets.ucepSeed, secrets.booksSecret]) {
 		for (const form of spellings(key)) expect(text).not.toContain(form);
 	}
 
-	// The key, the names and the UCEP seed are in the books' vault now: one
-	// record, one slot, the passkey's — sealed, which the scan above shows.
+	// The key, the names, the UCEP seed and the books' own identity are in the
+	// books' vault: one record, one slot, the passkey's — sealed, which the scan
+	// above shows. The books sign as themselves, not as the passkey.
 	const vaults = await page.evaluate(() =>
 		JSON.parse(localStorage.getItem('invoice.vaults.v1') ?? 'null')
 	);
 	expect(vaults).toHaveLength(1);
 	expect(vaults[0].slots).toHaveLength(1);
+	const booksDid = await page.evaluate(() => /** @type {any} */ (window).__invoiceE2E.booksDid());
+	expect(booksDid).toMatch(/^did:key:z6Mk/);
+	expect(booksDid).not.toBe(did);
 });
 
 test('without PRF the books stay shut, with a clear message', async ({ page }) => {

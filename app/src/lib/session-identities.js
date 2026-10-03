@@ -8,37 +8,41 @@
 // Changed: belege keeps the provider's default secp256k1 signing key (privacy01
 // switched to Ed25519), uses the provider's own `createSessionKeystore()`, and
 // removes the persistent keystore an earlier build left behind.
+// Changed here since the books moved (books-move.js): the identity is no longer
+// the passkey's but the books' own, an Ed25519 signer from the vault's secret.
 //
 // No private key at rest.
 //
 // OrbitDB signs every entry with whatever `keystore.getKey(identity.id)`
 // returns, and its default keystore (`KeyStore({ path })`) writes that key to
 // IndexedDB in the clear. Anyone with the browser profile could then sign
-// entries as the passkey's DID without the passkey.
+// entries as the books without any of their passkeys.
 //
-// The key does not need to be kept: it is derived from the passkey's PRF
-// answer, which every unlock reads anyway for the database key. So the
-// keystore here lives in memory only, is filled from that answer before the
-// provider looks, and is gone when the tab closes.
+// The key does not need to be kept. The books sign as an identity of their
+// own (books-move.js): an Ed25519 key derived from a secret in the books'
+// vault, which every unlock opens anyway. So the keystore here lives in memory
+// only and holds no key at all — it answers for the books' DID with a signer,
+// and the key stays inside that signer until the tab closes.
 
 import { Identities } from '@orbitdb/core';
 import { createSessionKeystore } from '@le-space/orbitdb-identity-provider-webauthn-did/keystore';
 
 /**
- * Identities on a session-only keystore that already holds the signing key.
+ * The `info` the books' signer is derived under (`createSecretSigner`). Bumping
+ * it gives the books another identity, and with it other databases.
+ */
+export const BOOKS_IDENTITY_INFO = 'invoice/books-identity/v1';
+
+/**
+ * Identities on a session-only keystore that signs as the books.
  *
  * @param {any} ipfs a Helia instance
- * @param {{ did: string, signingKey: Uint8Array }} key derived from this unlock's PRF answer
+ * @param {{ did: string, type: 'Ed25519', publicKey: Uint8Array, sign: (data: Uint8Array) => Promise<Uint8Array> }} signer
+ *   from `createSecretSigner`, with the vault's secret
  * @returns {Promise<any>} OrbitDB Identities
  */
-export async function createSessionIdentities(ipfs, { did, signingKey }) {
-	if (typeof did !== 'string' || !did) throw new Error('A DID is required.');
-	if (!(signingKey instanceof Uint8Array) || signingKey.length !== 32) {
-		throw new Error('A 32-byte signing key is required.');
-	}
+export async function createBooksIdentities(ipfs, signer) {
 	// Typed `unknown` by the provider; it is an OrbitDB KeyStore on MemoryStorage.
-	const keystore = /** @type {any} */ (await createSessionKeystore());
-	// Empty, being new: no earlier key to keep (seedRestoredSigningKey's concern).
-	await keystore.addKey(did, { privateKey: signingKey });
+	const keystore = /** @type {any} */ (await createSessionKeystore({ signer }));
 	return Identities({ ipfs, keystore });
 }

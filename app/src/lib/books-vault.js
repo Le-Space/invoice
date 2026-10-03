@@ -17,10 +17,17 @@
 // The records are kept in this origin's localStorage, like the credential.
 // They hold nothing secret in the clear, and they do not travel yet: the
 // backup carries them later.
+//
+// Version 2 adds the books' own identity: a random secret every slot opens
+// (`booksSecret`, made into a signer with `createSecretSigner`), and, once the
+// collections have moved to databases rooted at that identity
+// (books-move.js), where they were (`moved`). A version-1 vault is read as it
+// is and upgraded on the next unlock.
 
 import {
 	createVault,
 	openVault,
+	replacePayload,
 	deriveAesKey,
 	slotIdFor
 } from '@le-space/orbitdb-identity-provider-webauthn-did';
@@ -36,10 +43,18 @@ export const VAULTS_STORAGE_KEY = 'invoice.vaults.v1';
 const COLLECTIONS = /** @type {const} */ (['invoices', 'customers', 'settings']);
 
 /**
+ * @typedef {object} BooksMove
+ * @property {string} at ISO 8601, when the collections moved
+ * @property {Record<typeof COLLECTIONS[number], string>} from the old addresses, read-only
+ */
+
+/**
  * @typedef {object} BooksValues
  * @property {Uint8Array} dbKey 32 bytes, the AES-GCM key of every collection
  * @property {Record<typeof COLLECTIONS[number], string>} names the OrbitDB names
  * @property {Uint8Array} peerSeed 32 bytes, the UCEP node's key seed
+ * @property {Uint8Array} [booksSecret] 32 bytes, the books' identity (version 2)
+ * @property {BooksMove} [moved] where the collections were before they moved (version 2)
  */
 
 /** A vault record the app cannot read: it is not replaced, the books stay shut. */
@@ -66,10 +81,12 @@ function fromHex(value, bytes) {
 function encodeValues(values) {
 	return new TextEncoder().encode(
 		JSON.stringify({
-			version: 1,
+			version: values.booksSecret ? 2 : 1,
 			dbKey: toHex(values.dbKey),
 			names: values.names,
-			peerSeed: toHex(values.peerSeed)
+			peerSeed: toHex(values.peerSeed),
+			...(values.booksSecret ? { booksSecret: toHex(values.booksSecret) } : {}),
+			...(values.moved ? { moved: values.moved } : {})
 		})
 	);
 }
@@ -85,7 +102,7 @@ function decodeValues(payload) {
 			cause: error
 		});
 	}
-	if (parsed?.version !== 1) {
+	if (parsed?.version !== 1 && parsed?.version !== 2) {
 		throw new VaultStorageError(`A vault of version ${parsed?.version} is not readable here.`);
 	}
 	/** @type {Record<string, string>} */
@@ -97,11 +114,33 @@ function decodeValues(payload) {
 		}
 		names[collection] = name;
 	}
-	return {
+	/** @type {BooksValues} */
+	const values = {
 		dbKey: fromHex(parsed.dbKey, 32),
 		names: /** @type {BooksValues['names']} */ (names),
 		peerSeed: fromHex(parsed.peerSeed, 32)
 	};
+	if (parsed.version === 2) {
+		values.booksSecret = fromHex(parsed.booksSecret, 32);
+		if (parsed.moved !== undefined) values.moved = readMove(parsed.moved);
+	}
+	return values;
+}
+
+/** @param {any} moved @returns {BooksMove} */
+function readMove(moved) {
+	if (typeof moved?.at !== 'string' || typeof moved?.from !== 'object' || !moved.from) {
+		throw new VaultStorageError('The vault records a move it cannot read.');
+	}
+	/** @type {Record<string, string>} */
+	const from = {};
+	for (const collection of COLLECTIONS) {
+		if (typeof moved.from[collection] !== 'string') {
+			throw new VaultStorageError(`The vault records no old address for ${collection}.`);
+		}
+		from[collection] = moved.from[collection];
+	}
+	return { at: moved.at, from: /** @type {BooksMove['from']} */ (from) };
 }
 
 /**
@@ -148,6 +187,52 @@ function loadVaults(storage) {
 /** @param {Storage} storage @param {any[]} vaults */
 function saveVaults(storage, vaults) {
 	storage.setItem(VAULTS_STORAGE_KEY, JSON.stringify(vaults));
+}
+
+/**
+ * Put a changed record in place of the one with the same id.
+ *
+ * @param {Storage} storage
+ * @param {any} vault
+ */
+function replaceVault(storage, vault) {
+	const vaults = loadVaults(storage);
+	const at = vaults.findIndex((candidate) => candidate?.id === vault.id);
+	if (at === -1) throw new VaultStorageError('The vault is no longer in this browser.');
+	vaults[at] = vault;
+	saveVaults(storage, vaults);
+}
+
+/**
+ * The same books with new values — the same vault key and slots, a new
+ * payload — written in place of the old record.
+ *
+ * @param {{ vault: any, vaultKey: Uint8Array }} opened from `openBooksVault`
+ * @param {BooksValues} values
+ * @param {Storage} [storage]
+ * @returns {Promise<{ values: BooksValues, vault: any, vaultKey: Uint8Array }>}
+ */
+export async function updateBooksVault({ vault, vaultKey }, values, storage = localStorage) {
+	const next = await replacePayload(vault, vaultKey, encodeValues(values));
+	replaceVault(storage, next);
+	return { values, vault: next, vaultKey };
+}
+
+/**
+ * Give version-1 books their own identity: a random secret, kept in the vault
+ * and so the same for every slot. Books that have one keep it.
+ *
+ * @param {{ values: BooksValues, vault: any, vaultKey: Uint8Array }} opened
+ * @param {Storage} [storage]
+ * @returns {Promise<{ values: BooksValues, vault: any, vaultKey: Uint8Array }>}
+ */
+export async function ensureBooksSecret(opened, storage = localStorage) {
+	if (opened.values.booksSecret) return opened;
+	return updateBooksVault(
+		opened,
+		{ ...opened.values, booksSecret: crypto.getRandomValues(new Uint8Array(32)) },
+		storage
+	);
 }
 
 /**

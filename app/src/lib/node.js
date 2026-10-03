@@ -7,12 +7,13 @@
 // `createOrbitDBInstance`.
 // Changed: always persistent (no memory mode, so `keepLogsWhereTheChoiceSays`
 // has nothing to decide and is not needed); no network (see network.js); no
-// todo list, delegation, relay or diagnostics code; the database key comes
-// from the books' vault (books-vault.js), opened with the passkey's PRF output
-// before anything else is, and the same PRF answer seeds the identity's
-// signing key, which spares the passkey the provider's own PRF prompt. That key lives in a session-only keystore
-// (session-identities.js) and the libp2p peer key is ephemeral (network.js):
-// no private key is kept in IndexedDB or localStorage.
+// todo list, delegation, relay or diagnostics code. The database key, the
+// names and the UCEP seed come from the books' vault (books-vault.js), opened
+// with the passkey's PRF output before anything else is. OrbitDB signs as the
+// books' own identity, an Ed25519 signer from the vault's secret, in a
+// session-only keystore (session-identities.js); the collections moved to
+// databases rooted at that identity (books-move.js). The libp2p peer key is
+// ephemeral (network.js): no private key is kept in IndexedDB or localStorage.
 
 import { createHeliaLight } from 'helia';
 import { withBitswap } from '@helia/bitswap';
@@ -23,15 +24,17 @@ import { createOrbitDB, useIdentityProvider } from '@orbitdb/core';
 import {
 	OrbitDBWebAuthnIdentityProviderFunction,
 	WebAuthnDIDProvider,
-	deriveSigningKeyBytes
+	createSecretSigner
 } from '@le-space/orbitdb-identity-provider-webauthn-did';
 import * as dagCbor from '@ipld/dag-cbor';
 
 import { createEphemeralPeerKey, createOfflineLibp2p } from './network.js';
-import { openBooksVault } from './books-vault.js';
+import { ensureBooksSecret, openBooksVault, updateBooksVault } from './books-vault.js';
+import { MOVE_RECORD_KEY, booksAccessController, moveBooks } from './books-move.js';
 import { readPrfOutput } from './passkey-identity.js';
-import { createSessionIdentities } from './session-identities.js';
+import { BOOKS_IDENTITY_INFO, createBooksIdentities } from './session-identities.js';
 import { openStore } from './store/repository.js';
+import { setSetting } from './store/settings.js';
 
 /**
  * IndexedDB names. Everything the invoice app keeps lives under `invoice/`. There is no
@@ -45,13 +48,14 @@ export const STORAGE_PATHS = Object.freeze({
 
 /**
  * @typedef {object} Session
- * @property {string} did
+ * @property {string} did the DID of the passkey that unlocked: who writes
+ * @property {string} booksDid the books' own identity, the root writer of every collection
  * @property {Awaited<ReturnType<typeof openStore>>} store
  * @property {string} identityHash the identity document's hash
  * @property {string} peerId this session's libp2p peer id
  * @property {Uint8Array} ucepSeed the seed of the UCEP node's peer key, from the books' vault
  * @property {() => Promise<void>} stop
- * @property {{ signingKey: Uint8Array, databaseKey: Uint8Array, peerKey: Uint8Array, ucepSeed: Uint8Array }} [secretsForE2E]
+ * @property {{ databaseKey: Uint8Array, peerKey: Uint8Array, ucepSeed: Uint8Array, booksSecret: Uint8Array }} [secretsForE2E]
  *   only in E2E builds
  */
 
@@ -59,10 +63,13 @@ export const STORAGE_PATHS = Object.freeze({
  * Unlock the books with a passkey: PRF → key, then Helia, OrbitDB and the
  * sealed databases.
  *
- * Prompts: one for the PRF output here. The provider signs the identity with
- * the passkey once per identity document and keeps that (public) proof, so a
- * new passkey adds its `create` and that signature, a restore its two touches
- * and that signature, and an unlock nothing.
+ * Prompts: one for the PRF output here, and nothing else: the books' identity
+ * is a signer from the vault, which asks no passkey. A new passkey adds its
+ * `create`, a restore its two touches.
+ *
+ * The first unlock after the books got their own identity moves the
+ * collections to databases rooted at it (books-move.js) before anything is
+ * shown; the old ones stay, read-only.
  *
  * @param {any} credential from passkey-identity.js
  * @returns {Promise<Session>}
@@ -75,10 +82,11 @@ export async function startSession(credential) {
 	// The key, the names and the UCEP seed come from the books' vault, which any
 	// passkey with a slot opens. The first unlock fills it with what this passkey
 	// derives, so books made before the vault are found where they are.
-	const { values } = await openBooksVault({
-		prfOutput,
-		rawCredentialId: credential.rawCredentialId
-	});
+	// Books from before version 2 get their own identity's secret here.
+	const opened = await ensureBooksSecret(
+		await openBooksVault({ prfOutput, rawCredentialId: credential.rawCredentialId })
+	);
+	const { values } = opened;
 	const encryptionKey = values.dbKey;
 	// The UCEP node's key (ucep/net.js): the same peer id on every unlock.
 	const ucepSeed = values.peerSeed;
@@ -98,23 +106,18 @@ export async function startSession(credential) {
 			// Already registered.
 		}
 
-		// The provider would ask the passkey for this very PRF output again to
-		// derive its secp256k1 signing key. Derived here from the answer already
-		// in hand, with the provider's own function, it is the same key — and in
-		// the keystore before the provider looks, so it does not ask. The
-		// keystore is in memory: the next unlock derives the key again.
-		//
-		// secp256k1, the provider's default, as before: the key, and with it the
-		// identity document and its cached passkey proof, stay what PR #1 made.
+		// Who unlocked: their DID goes into `author` and keys the invoice number
+		// circle, so two keys never count in one circle.
 		const did = credential.did ?? (await WebAuthnDIDProvider.createDID(credential));
-		const signingKey =
-			credential.signingKey instanceof Uint8Array
-				? credential.signingKey
-				: await deriveSigningKeyBytes(prfOutput, did);
-		const identities = await createSessionIdentities(helia, { did, signingKey });
 
+		// The books' identity: the vault's secret as an Ed25519 signer, the same
+		// for every slot, and the root of every collection's access controller.
+		const books = await createSecretSigner(/** @type {Uint8Array} */ (values.booksSecret), {
+			info: BOOKS_IDENTITY_INFO
+		});
+		const identities = await createBooksIdentities(helia, books);
 		const identity = await identities.createIdentity({
-			provider: OrbitDBWebAuthnIdentityProviderFunction({ webauthnCredential: credential })
+			provider: OrbitDBWebAuthnIdentityProviderFunction({ signer: books })
 		});
 		const orbitdb = await createOrbitDB({
 			ipfs: helia,
@@ -123,10 +126,45 @@ export async function startSession(credential) {
 			identity,
 			directory: STORAGE_PATHS.orbitdb
 		});
-		const store = await openStore({ orbitdb, encryptionKey, names: values.names });
+
+		let move = null;
+		if (!values.moved) {
+			// The collections were written by the passkey that made the books, under
+			// its own access controller. That passkey is the only slot until a
+			// second key is added, and adding one waits for the move.
+			if (opened.vault.slots.length !== 1) {
+				throw new Error(
+					'Die Bücher sind noch nicht umgezogen, haben aber schon mehrere Schlüssel; ' +
+						'bitte mit dem Schlüssel entsperren, mit dem sie angelegt wurden.'
+				);
+			}
+			move = await moveBooks({
+				orbitdb,
+				names: values.names,
+				encryptionKey,
+				formerWriter: did
+			});
+		}
+
+		const store = await openStore({
+			orbitdb,
+			encryptionKey,
+			names: values.names,
+			author: did,
+			accessController: booksAccessController(books.did)
+		});
+
+		if (move) {
+			const at = new Date().toISOString();
+			// The record of the move, in the books themselves: what came from where.
+			await setSetting(store.settings, MOVE_RECORD_KEY, { at, by: did, ...move });
+			// The switch: from now on the vault says the books are at their new place.
+			await updateBooksVault(opened, { ...values, moved: { at, from: move.from } });
+		}
 
 		return {
-			did: identity.id,
+			did,
+			booksDid: identity.id,
 			identityHash: identity.hash,
 			peerId: libp2p.peerId.toString(),
 			store,
@@ -136,10 +174,10 @@ export async function startSession(credential) {
 			...(import.meta.env.VITE_E2E === 'true'
 				? {
 						secretsForE2E: {
-							signingKey,
 							databaseKey: encryptionKey,
 							peerKey: peerKey.raw,
-							ucepSeed
+							ucepSeed,
+							booksSecret: /** @type {Uint8Array} */ (values.booksSecret)
 						}
 					}
 				: {}),
