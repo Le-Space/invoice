@@ -96,7 +96,31 @@ export default {
 		busy: 'Bitte den Passkey bestätigen …',
 		createFailed: 'Der Passkey konnte nicht angelegt werden.',
 		restoreFailed: 'Auf diesem Gerät wurde kein Passkey für die Rechnungs-App gefunden.',
-		unlockFailed: 'In diesem Browser ist kein Passkey gespeichert.'
+		unlockFailed: 'In diesem Browser ist kein Passkey gespeichert.',
+		choose: 'Schlüssel'
+	},
+	keys: {
+		heading: 'Schlüssel',
+		intro:
+			'Jeder eingetragene Passkey öffnet diese Bücher und schreibt in sie. Ein zweiter – etwa ein YubiKey in der Schublade – rettet sie, wenn einer verloren geht.',
+		current: 'gerade benutzt',
+		unnamed: 'In diesem Browser nicht hinterlegt',
+		remove: 'Entfernen',
+		removeHint:
+			'Ein entfernter Schlüssel öffnet die Bücher nicht mehr. Was er schon geöffnet hat, kennt er aber weiter; gegen einen gestohlenen Schlüssel hilft nur ein erneuter Umzug.',
+		addLabel: 'Name für den neuen Schlüssel',
+		addPlaceholder: 'z. B. YubiKey Schublade',
+		add: 'Zweiten Schlüssel hinzufügen',
+		addMore: 'Weiteren Schlüssel hinzufügen',
+		addHint:
+			'Der neue Schlüssel wird zweimal gefragt: einmal zum Anlegen, einmal für sein Fach im Tresor.',
+		adding: 'Bitte den neuen Schlüssel bestätigen …',
+		removing: 'Wird entfernt …',
+		notCurrent:
+			'Mit diesem Schlüssel ist gerade entsperrt. Entsperre mit einem anderen, um ihn zu entfernen.',
+		defaultLabel: 'Zweiter Schlüssel',
+		onlyOne: 'Nur ein Schlüssel öffnet diese Bücher. Geht er verloren, sind sie verloren.',
+		onlyOneAction: 'Zweiten Schlüssel hinzufügen'
 	},
 	invoice: {
 		app: {

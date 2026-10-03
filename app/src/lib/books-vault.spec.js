@@ -4,12 +4,16 @@ import { describe, expect, it } from 'vitest';
 import { addSlot, deriveAesKey, slotIdFor } from '@le-space/orbitdb-identity-provider-webauthn-did';
 
 import {
+	RemovedPasskeyError,
 	VAULTS_STORAGE_KEY,
 	VAULT_SLOT_INFO,
 	VaultStorageError,
+	addBooksSlot,
+	booksSlotIds,
 	deriveBooksValues,
 	ensureBooksSecret,
 	openBooksVault,
+	removeBooksSlot,
 	updateBooksVault
 } from './books-vault.js';
 import { deriveDatabaseKey, deriveDatabaseName, derivePeerKeySeed } from './database-keys.js';
@@ -197,5 +201,35 @@ describe('books vault', () => {
 		);
 		// The addresses are sealed too: nothing in the stored record names them.
 		expect(storage.getItem(VAULTS_STORAGE_KEY)).not.toContain('zdpuA');
+	});
+
+	it('adds a passkey, removes another, and a removed one opens nothing here — not even books of its own', async () => {
+		const storage = memoryStorage();
+		const a = passkey();
+		const b = passkey();
+		const opened = await ensureBooksSecret(await openBooksVault({ ...a, storage }), storage);
+
+		const withB = await addBooksSlot(opened, b, storage);
+		expect(booksSlotIds(withB)).toEqual([
+			await slotIdFor(a.rawCredentialId),
+			await slotIdFor(b.rawCredentialId)
+		]);
+		const viaB = await openBooksVault({ ...b, storage });
+		expect(hex(viaB.values.dbKey)).toBe(hex(opened.values.dbKey));
+
+		const withoutA = await removeBooksSlot(viaB, a.rawCredentialId, storage);
+		expect(booksSlotIds(withoutA)).toEqual([await slotIdFor(b.rawCredentialId)]);
+		await expect(openBooksVault({ ...a, storage })).rejects.toBeInstanceOf(RemovedPasskeyError);
+		expect(JSON.parse(/** @type {string} */ (storage.getItem(VAULTS_STORAGE_KEY)))).toHaveLength(1);
+
+		// The last one stays.
+		await expect(removeBooksSlot(withoutA, b.rawCredentialId, storage)).rejects.toMatchObject({
+			code: 'VAULT_LAST_SLOT'
+		});
+
+		// Added again, A opens the same books again.
+		await addBooksSlot(await openBooksVault({ ...b, storage }), a, storage);
+		const backA = await openBooksVault({ ...a, storage });
+		expect(hex(backA.values.dbKey)).toBe(hex(opened.values.dbKey));
 	});
 });

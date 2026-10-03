@@ -76,6 +76,17 @@
 				>
 			{/each}
 		</nav>
+		{#if app.keys.length === 1 && !page.url.pathname.startsWith('/einstellungen')}
+			<p
+				class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-data/40 bg-data/10 px-3 py-2 text-sm text-heading"
+				data-testid="one-key-hint"
+			>
+				<span>{t('keys.onlyOne')}</span>
+				<a href="/einstellungen#schluessel" class="font-medium underline"
+					>{t('keys.onlyOneAction')}</a
+				>
+			</p>
+		{/if}
 		<main>
 			{@render children()}
 		</main>

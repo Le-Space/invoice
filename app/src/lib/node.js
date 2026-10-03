@@ -50,6 +50,9 @@ export const STORAGE_PATHS = Object.freeze({
  * @typedef {object} Session
  * @property {string} did the DID of the passkey that unlocked: who writes
  * @property {string} booksDid the books' own identity, the root writer of every collection
+ * @property {string} credentialId the passkey that unlocked, base64url
+ * @property {{ values: any, vault: any, vaultKey: Uint8Array }} vault the books' vault, open:
+ *   what adding and removing a passkey works on (books-vault.js)
  * @property {Awaited<ReturnType<typeof openStore>>} store
  * @property {string} identityHash the identity document's hash
  * @property {string} peerId this session's libp2p peer id
@@ -83,7 +86,7 @@ export async function startSession(credential) {
 	// passkey with a slot opens. The first unlock fills it with what this passkey
 	// derives, so books made before the vault are found where they are.
 	// Books from before version 2 get their own identity's secret here.
-	const opened = await ensureBooksSecret(
+	let opened = await ensureBooksSecret(
 		await openBooksVault({ prfOutput, rawCredentialId: credential.rawCredentialId })
 	);
 	const { values } = opened;
@@ -159,12 +162,14 @@ export async function startSession(credential) {
 			// The record of the move, in the books themselves: what came from where.
 			await setSetting(store.settings, MOVE_RECORD_KEY, { at, by: did, ...move });
 			// The switch: from now on the vault says the books are at their new place.
-			await updateBooksVault(opened, { ...values, moved: { at, from: move.from } });
+			opened = await updateBooksVault(opened, { ...values, moved: { at, from: move.from } });
 		}
 
 		return {
 			did,
 			booksDid: identity.id,
+			credentialId: credential.credentialId,
+			vault: opened,
 			identityHash: identity.hash,
 			peerId: libp2p.peerId.toString(),
 			store,

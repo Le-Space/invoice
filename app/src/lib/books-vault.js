@@ -27,6 +27,8 @@
 import {
 	createVault,
 	openVault,
+	addSlot,
+	removeSlot,
 	replacePayload,
 	deriveAesKey,
 	slotIdFor
@@ -38,6 +40,14 @@ export const VAULT_SLOT_INFO = 'invoice/vault-slot/v1';
 
 /** Where the vault records are kept: a JSON array, one record per set of books. */
 export const VAULTS_STORAGE_KEY = 'invoice.vaults.v1';
+
+/**
+ * The slot ids of passkeys removed from books in this browser. A removed
+ * passkey has no slot anywhere, and would otherwise be given books of its own —
+ * which for books it made are the very names and key it derives: a stale copy
+ * that looks like the real books.
+ */
+export const REMOVED_SLOTS_STORAGE_KEY = 'invoice.removed-slots.v1';
 
 /** The collections a vault names, as store/repository.js opens them. */
 const COLLECTIONS = /** @type {const} */ (['invoices', 'customers', 'settings']);
@@ -56,6 +66,16 @@ const COLLECTIONS = /** @type {const} */ (['invoices', 'customers', 'settings'])
  * @property {Uint8Array} [booksSecret] 32 bytes, the books' identity (version 2)
  * @property {BooksMove} [moved] where the collections were before they moved (version 2)
  */
+
+/** A passkey that was removed from the books in this browser: it opens nothing here. */
+export class RemovedPasskeyError extends Error {
+	constructor() {
+		super(
+			'Dieser Schlüssel wurde aus den Büchern entfernt und öffnet sie nicht mehr. Bitte mit einem eingetragenen Schlüssel entsperren.'
+		);
+		this.name = 'RemovedPasskeyError';
+	}
+}
 
 /** A vault record the app cannot read: it is not replaced, the books stay shut. */
 export class VaultStorageError extends Error {
@@ -247,6 +267,7 @@ export async function ensureBooksSecret(opened, storage = localStorage) {
  * @param {Storage} [params.storage] localStorage, or a stand-in in tests
  * @returns {Promise<{ values: BooksValues, vault: any, vaultKey: Uint8Array, created: boolean }>}
  * @throws {VaultStorageError} when the stored records cannot be read
+ * @throws {RemovedPasskeyError} when this passkey was removed from the books here
  * @throws {import('@le-space/orbitdb-identity-provider-webauthn-did').VaultError}
  *   `VAULT_LOCKED` when this passkey's slot does not open (an altered record)
  */
@@ -263,8 +284,82 @@ export async function openBooksVault({ prfOutput, rawCredentialId, storage = loc
 		return { values: decodeValues(payload), vault, vaultKey, created: false };
 	}
 
+	if (removedSlots(storage).includes(kid)) throw new RemovedPasskeyError();
+
 	const values = await deriveBooksValues(prfOutput);
 	const made = await createVault(encodeValues(values), slot);
 	saveVaults(storage, [...vaults, made.vault]);
 	return { values, vault: made.vault, vaultKey: made.vaultKey, created: true };
+}
+
+/**
+ * One more passkey for these books: its slot, sealed under the key its own PRF
+ * output derives. Needs the vault open — the books unlocked — and the new
+ * passkey's answer, so both keys are at hand at once.
+ *
+ * @param {{ values: BooksValues, vault: any, vaultKey: Uint8Array }} opened
+ * @param {{ prfOutput: Uint8Array, rawCredentialId: Uint8Array }} key the new passkey
+ * @param {Storage} [storage]
+ * @returns {Promise<{ values: BooksValues, vault: any, vaultKey: Uint8Array }>}
+ * @throws {import('@le-space/orbitdb-identity-provider-webauthn-did').VaultError}
+ *   `VAULT_SLOT_EXISTS` when the passkey has one already
+ */
+export async function addBooksSlot(opened, { prfOutput, rawCredentialId }, storage = localStorage) {
+	const vault = await addSlot(opened.vault, opened.vaultKey, {
+		slotKey: await deriveAesKey(prfOutput, VAULT_SLOT_INFO),
+		rawCredentialId
+	});
+	replaceVault(storage, vault);
+	// A passkey removed once and added again opens the books again.
+	const kid = await slotIdFor(rawCredentialId);
+	const removed = removedSlots(storage);
+	if (removed.includes(kid)) {
+		storage.setItem(
+			REMOVED_SLOTS_STORAGE_KEY,
+			JSON.stringify(removed.filter((other) => other !== kid))
+		);
+	}
+	return { ...opened, vault };
+}
+
+/**
+ * A passkey no longer opens these books.
+ *
+ * It does not undo what that passkey already opened: it knew the vault key,
+ * and an older copy of the record still has its slot. Against a stolen key
+ * the books have to move again, under a new secret.
+ *
+ * @param {{ values: BooksValues, vault: any, vaultKey: Uint8Array }} opened
+ * @param {Uint8Array} rawCredentialId the passkey to remove
+ * @param {Storage} [storage]
+ * @returns {Promise<{ values: BooksValues, vault: any, vaultKey: Uint8Array }>}
+ * @throws {import('@le-space/orbitdb-identity-provider-webauthn-did').VaultError}
+ *   `VAULT_LAST_SLOT` for the only one, `VAULT_NO_SLOT` for one that has none
+ */
+export async function removeBooksSlot(opened, rawCredentialId, storage = localStorage) {
+	const vault = await removeSlot(opened.vault, rawCredentialId);
+	replaceVault(storage, vault);
+	const kid = await slotIdFor(rawCredentialId);
+	storage.setItem(REMOVED_SLOTS_STORAGE_KEY, JSON.stringify([...removedSlots(storage), kid]));
+	return { ...opened, vault };
+}
+
+/** @param {Storage} storage @returns {string[]} */
+function removedSlots(storage) {
+	try {
+		const parsed = JSON.parse(storage.getItem(REMOVED_SLOTS_STORAGE_KEY) ?? '[]');
+		return Array.isArray(parsed) ? parsed.filter((kid) => typeof kid === 'string') : [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * The slot ids of the books' passkeys: SHA-256 of each raw credential id.
+ *
+ * @param {{ vault: any }} opened
+ * @returns {string[]}
+ */
+export function booksSlotIds(opened) {
+	return opened.vault.slots.map((/** @type {any} */ slot) => slot.kid);
 }

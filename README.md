@@ -77,7 +77,9 @@ books' own identity. The books sign as that identity, and it is the root of
 every collection's access controller, so any passkey with a slot in the vault
 writes as the books; the passkey's DID is kept as each record's `author`.
 Books made before moved once to databases rooted at it; the old ones stay,
-read-only. Nothing is readable on disk and no private key is kept
+read-only. Under Einstellungen → Schlüssel a second passkey — a YubiKey, say —
+gets a slot of its own, and a key can be removed (never the last, never the one
+in use); a removed key opens nothing in this browser any more. Nothing is readable on disk and no private key is kept
 (`app/src/lib/node.js`, `books-vault.js`, `books-move.js`,
 `session-identities.js`). The
 session and store layer comes from Le-Space/belege, where its author wrote it,
