@@ -9,7 +9,7 @@
 //   updatedAt  ISO 8601, set on every write
 //   deleted    soft delete; bookkeeping records are never removed, and an
 //              append-only log could not remove them anyway
-//   author     the DID of the identity that wrote this version
+//   author     the DID of the person (passkey) who wrote this version
 // and keeps money in integer cents: any field whose name ends in `Cents`
 // must be a safe integer.
 //
@@ -125,10 +125,21 @@ export function createCollection(db, name, { author, now = () => new Date() }) {
  * @param {Uint8Array} params.encryptionKey 32 bytes, from the books' vault (books-vault.js)
  * @param {Record<CollectionName, string>} params.names the OrbitDB name of each collection,
  *   from the books' vault (books-vault.js)
+ * @param {string} [params.author] the DID written into `author` — the person writing, which
+ *   is not the OrbitDB identity when that is the books' own (books-move.js); default: that identity
+ * @param {any} [params.accessController] the collections' `AccessController` (books-move.js);
+ *   default: OrbitDB's
  * @param {Record<string, any>} [params.openOptions] extra `orbitdb.open` options (tests pass memory storages)
  * @returns {Promise<{ invoices: Collection, customers: Collection, settings: Collection, close: () => Promise<void> }>}
  */
-export async function openStore({ orbitdb, encryptionKey, names, openOptions = {} }) {
+export async function openStore({
+	orbitdb,
+	encryptionKey,
+	names,
+	author = orbitdb.identity.id,
+	accessController,
+	openOptions = {}
+}) {
 	if (!(encryptionKey instanceof Uint8Array) || encryptionKey.length !== 32) {
 		throw new Error('The store cannot be opened without its 32-byte encryption key.');
 	}
@@ -137,7 +148,6 @@ export async function openStore({ orbitdb, encryptionKey, names, openOptions = {
 			throw new Error(`The store cannot be opened without a name for ${name}.`);
 		}
 	}
-	const author = orbitdb.identity.id;
 	const encryption = await payloadEncryption(encryptionKey);
 
 	/** @type {Record<string, any>} */
@@ -149,6 +159,7 @@ export async function openStore({ orbitdb, encryptionKey, names, openOptions = {
 			type: SealedDocuments.type,
 			Database: SealedDocuments({ indexBy: 'id' }),
 			encryption,
+			...(accessController ? { AccessController: accessController } : {}),
 			...(typeof openOptions === 'function' ? await openOptions(name) : openOptions)
 		});
 		collections[name] = createCollection(dbs[name], name, { author });

@@ -72,12 +72,14 @@ it with, in German or English.
 
 `app/` is a PWA (SvelteKit 2, Svelte 5) on the core. A passkey opens it: its
 PRF answer opens the books' vault, which holds the key every OrbitDB database
-is sealed with, the database names and the UCEP peer seed — on first use the
-values this passkey derives — and derives the OrbitDB signing key. Nothing is
-readable on disk and no private key is kept (`app/src/lib/node.js`,
-`books-vault.js`, `database-keys.js`, `session-identities.js`). The vault gives
-each passkey a slot of its own, which is how a second security key will open
-the same books. The
+is sealed with, the database names, the UCEP peer seed and the secret of the
+books' own identity. The books sign as that identity, and it is the root of
+every collection's access controller, so any passkey with a slot in the vault
+writes as the books; the passkey's DID is kept as each record's `author`.
+Books made before moved once to databases rooted at it; the old ones stay,
+read-only. Nothing is readable on disk and no private key is kept
+(`app/src/lib/node.js`, `books-vault.js`, `books-move.js`,
+`session-identities.js`). The
 session and store layer comes from Le-Space/belege, where its author wrote it,
 and is published here under MIT.
 

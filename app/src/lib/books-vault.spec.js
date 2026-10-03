@@ -8,7 +8,9 @@ import {
 	VAULT_SLOT_INFO,
 	VaultStorageError,
 	deriveBooksValues,
-	openBooksVault
+	ensureBooksSecret,
+	openBooksVault,
+	updateBooksVault
 } from './books-vault.js';
 import { deriveDatabaseKey, deriveDatabaseName, derivePeerKeySeed } from './database-keys.js';
 
@@ -146,5 +148,54 @@ describe('books vault', () => {
 			VaultStorageError
 		);
 		expect(storage.getItem(VAULTS_STORAGE_KEY)).toBe('{not json');
+	});
+
+	it('gives books their own identity once: the same secret for every slot, kept on update', async () => {
+		const storage = memoryStorage();
+		const a = passkey();
+		const b = passkey();
+		const first = await ensureBooksSecret(await openBooksVault({ ...a, storage }), storage);
+		expect(first.values.booksSecret).toHaveLength(32);
+
+		// Again: the secret stays what it is.
+		const again = await ensureBooksSecret(await openBooksVault({ ...a, storage }), storage);
+		expect(hex(/** @type {Uint8Array} */ (again.values.booksSecret))).toBe(
+			hex(/** @type {Uint8Array} */ (first.values.booksSecret))
+		);
+
+		// Through another slot: the same secret, so the same books identity.
+		const withB = await addSlot(again.vault, again.vaultKey, {
+			slotKey: await deriveAesKey(b.prfOutput, VAULT_SLOT_INFO),
+			rawCredentialId: b.rawCredentialId
+		});
+		storage.setItem(VAULTS_STORAGE_KEY, JSON.stringify([withB]));
+		const viaB = await openBooksVault({ ...b, storage });
+		expect(hex(/** @type {Uint8Array} */ (viaB.values.booksSecret))).toBe(
+			hex(/** @type {Uint8Array} */ (first.values.booksSecret))
+		);
+		expect(hex(viaB.values.dbKey)).toBe(hex(first.values.dbKey));
+	});
+
+	it('records the move in place: the same vault, the same slots, the old addresses', async () => {
+		const storage = memoryStorage();
+		const a = passkey();
+		const opened = await ensureBooksSecret(await openBooksVault({ ...a, storage }), storage);
+		const moved = {
+			at: '2026-10-03T12:00:00.000Z',
+			from: { invoices: '/orbitdb/zdpuA', customers: '/orbitdb/zdpuB', settings: '/orbitdb/zdpuC' }
+		};
+		await updateBooksVault(opened, { ...opened.values, moved }, storage);
+
+		const stored = JSON.parse(/** @type {string} */ (storage.getItem(VAULTS_STORAGE_KEY)));
+		expect(stored).toHaveLength(1);
+		expect(stored[0].id).toBe(opened.vault.id);
+		expect(stored[0].slots).toEqual(opened.vault.slots);
+		const reopened = await openBooksVault({ ...a, storage });
+		expect(reopened.values.moved).toEqual(moved);
+		expect(hex(/** @type {Uint8Array} */ (reopened.values.booksSecret))).toBe(
+			hex(/** @type {Uint8Array} */ (opened.values.booksSecret))
+		);
+		// The addresses are sealed too: nothing in the stored record names them.
+		expect(storage.getItem(VAULTS_STORAGE_KEY)).not.toContain('zdpuA');
 	});
 });
