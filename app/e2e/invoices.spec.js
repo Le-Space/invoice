@@ -95,9 +95,17 @@ test('a USDC invoice from a template, issued, printed and sealed', async ({ page
 	const { text } = await everythingStoredAsText(page);
 	expect(text).not.toContain(customer);
 	expect(text).not.toContain('Serverbetrieb');
-	for (const key of [secrets.signingKey, secrets.databaseKey]) {
+	for (const key of [secrets.signingKey, secrets.databaseKey, secrets.ucepSeed]) {
 		for (const form of spellings(key)) expect(text).not.toContain(form);
 	}
+
+	// The key, the names and the UCEP seed are in the books' vault now: one
+	// record, one slot, the passkey's — sealed, which the scan above shows.
+	const vaults = await page.evaluate(() =>
+		JSON.parse(localStorage.getItem('invoice.vaults.v1') ?? 'null')
+	);
+	expect(vaults).toHaveLength(1);
+	expect(vaults[0].slots).toHaveLength(1);
 });
 
 test('without PRF the books stay shut, with a clear message', async ({ page }) => {

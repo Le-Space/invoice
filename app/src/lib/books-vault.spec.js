@@ -1,0 +1,150 @@
+// The books' vault: the first unlock keeps what the passkey derives today, every
+// later one reads it back, and a second passkey with a slot gets the same books.
+import { describe, expect, it } from 'vitest';
+import { addSlot, deriveAesKey, slotIdFor } from '@le-space/orbitdb-identity-provider-webauthn-did';
+
+import {
+	VAULTS_STORAGE_KEY,
+	VAULT_SLOT_INFO,
+	VaultStorageError,
+	deriveBooksValues,
+	openBooksVault
+} from './books-vault.js';
+import { deriveDatabaseKey, deriveDatabaseName, derivePeerKeySeed } from './database-keys.js';
+
+/** localStorage, in memory. */
+function memoryStorage() {
+	const items = new Map();
+	return /** @type {Storage} */ ({
+		getItem: (key) => (items.has(key) ? items.get(key) : null),
+		setItem: (key, value) => void items.set(key, String(value)),
+		removeItem: (key) => void items.delete(key),
+		clear: () => items.clear(),
+		key: (i) => [...items.keys()][i] ?? null,
+		get length() {
+			return items.size;
+		}
+	});
+}
+
+/** A passkey: its PRF output and its credential id. */
+function passkey() {
+	return {
+		prfOutput: crypto.getRandomValues(new Uint8Array(32)),
+		rawCredentialId: crypto.getRandomValues(new Uint8Array(16))
+	};
+}
+
+/** @param {Uint8Array} bytes */
+const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+describe('books vault', () => {
+	it('the first unlock keeps exactly what this passkey derives today', async () => {
+		const storage = memoryStorage();
+		const a = passkey();
+		const opened = await openBooksVault({ ...a, storage });
+
+		expect(opened.created).toBe(true);
+		expect(hex(opened.values.dbKey)).toBe(hex(await deriveDatabaseKey(a.prfOutput)));
+		expect(hex(opened.values.peerSeed)).toBe(hex(await derivePeerKeySeed(a.prfOutput)));
+		for (const collection of /** @type {const} */ (['invoices', 'customers', 'settings'])) {
+			expect(opened.values.names[collection]).toBe(
+				await deriveDatabaseName(a.prfOutput, collection)
+			);
+		}
+
+		const stored = JSON.parse(/** @type {string} */ (storage.getItem(VAULTS_STORAGE_KEY)));
+		expect(stored).toHaveLength(1);
+		expect(stored[0].slots.map((/** @type {any} */ s) => s.kid)).toEqual([
+			await slotIdFor(a.rawCredentialId)
+		]);
+	});
+
+	it('every later unlock reads the same values back, and makes no second vault', async () => {
+		const storage = memoryStorage();
+		const a = passkey();
+		const first = await openBooksVault({ ...a, storage });
+		const again = await openBooksVault({ ...a, storage });
+
+		expect(again.created).toBe(false);
+		expect(hex(again.values.dbKey)).toBe(hex(first.values.dbKey));
+		expect(again.values.names).toEqual(first.values.names);
+		expect(hex(again.values.peerSeed)).toBe(hex(first.values.peerSeed));
+		expect(JSON.parse(/** @type {string} */ (storage.getItem(VAULTS_STORAGE_KEY)))).toHaveLength(1);
+	});
+
+	it('a second passkey with a slot opens the same books', async () => {
+		const storage = memoryStorage();
+		const a = passkey();
+		const b = passkey();
+		const first = await openBooksVault({ ...a, storage });
+
+		// What "add a second key" will do: with the vault open, B gets a slot.
+		const withB = await addSlot(first.vault, first.vaultKey, {
+			slotKey: await deriveAesKey(b.prfOutput, VAULT_SLOT_INFO),
+			rawCredentialId: b.rawCredentialId
+		});
+		storage.setItem(VAULTS_STORAGE_KEY, JSON.stringify([withB]));
+
+		const viaB = await openBooksVault({ ...b, storage });
+		expect(viaB.created).toBe(false);
+		expect(hex(viaB.values.dbKey)).toBe(hex(first.values.dbKey));
+		expect(viaB.values.names).toEqual(first.values.names);
+		expect(hex(viaB.values.peerSeed)).toBe(hex(first.values.peerSeed));
+		// B derives other values itself; the vault is what makes them the same.
+		expect(hex((await deriveBooksValues(b.prfOutput)).dbKey)).not.toBe(hex(first.values.dbKey));
+	});
+
+	it('a passkey without a slot gets books of its own, as before, and the first stay as they are', async () => {
+		const storage = memoryStorage();
+		const a = passkey();
+		const stranger = passkey();
+		await openBooksVault({ ...a, storage });
+		const before = JSON.parse(/** @type {string} */ (storage.getItem(VAULTS_STORAGE_KEY)))[0];
+
+		const theirs = await openBooksVault({ ...stranger, storage });
+		expect(theirs.created).toBe(true);
+		expect(hex(theirs.values.dbKey)).toBe(hex(await deriveDatabaseKey(stranger.prfOutput)));
+
+		const after = JSON.parse(/** @type {string} */ (storage.getItem(VAULTS_STORAGE_KEY)));
+		expect(after).toHaveLength(2);
+		expect(after[0]).toEqual(before);
+	});
+
+	it('keeps nothing secret in the clear', async () => {
+		const storage = memoryStorage();
+		const a = passkey();
+		const { values } = await openBooksVault({ ...a, storage });
+		const stored = /** @type {string} */ (storage.getItem(VAULTS_STORAGE_KEY));
+
+		for (const secret of [values.dbKey, values.peerSeed, a.prfOutput, a.rawCredentialId]) {
+			expect(stored).not.toContain(hex(secret));
+		}
+		for (const name of Object.values(values.names)) expect(stored).not.toContain(name);
+	});
+
+	it('an altered record stays shut, and is not replaced by a new vault', async () => {
+		const storage = memoryStorage();
+		const a = passkey();
+		await openBooksVault({ ...a, storage });
+		const [vault] = JSON.parse(/** @type {string} */ (storage.getItem(VAULTS_STORAGE_KEY)));
+		const flipped =
+			(vault.payload.ciphertext[0] === '0' ? '1' : '0') + vault.payload.ciphertext.slice(1);
+		const altered = JSON.stringify([
+			{ ...vault, payload: { ...vault.payload, ciphertext: flipped } }
+		]);
+		storage.setItem(VAULTS_STORAGE_KEY, altered);
+
+		await expect(openBooksVault({ ...a, storage })).rejects.toMatchObject({ code: 'VAULT_LOCKED' });
+		expect(storage.getItem(VAULTS_STORAGE_KEY)).toBe(altered);
+	});
+
+	it('an unreadable store is reported, not overwritten', async () => {
+		const storage = memoryStorage();
+		storage.setItem(VAULTS_STORAGE_KEY, '{not json');
+		await expect(openBooksVault({ ...passkey(), storage })).rejects.toBeInstanceOf(
+			VaultStorageError
+		);
+		expect(storage.getItem(VAULTS_STORAGE_KEY)).toBe('{not json');
+	});
+});

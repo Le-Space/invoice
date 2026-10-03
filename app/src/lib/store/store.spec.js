@@ -16,7 +16,7 @@ import { Documents, Identities, KeyStore, MemoryStorage, createOrbitDB } from '@
 import * as dagCbor from '@ipld/dag-cbor';
 
 import { createOfflineLibp2p } from '../network.js';
-import { deriveDatabaseKey } from '../database-keys.js';
+import { deriveDatabaseKey, deriveDatabaseName } from '../database-keys.js';
 import { payloadEncryption } from '../entry-encryption.js';
 import { openStore } from './repository.js';
 import { isUlid } from './ids.js';
@@ -61,7 +61,11 @@ beforeAll(async () => {
 	store = await openStore({
 		orbitdb,
 		encryptionKey: await deriveDatabaseKey(prfOutput),
-		prfOutput,
+		names: {
+			invoices: await deriveDatabaseName(prfOutput, 'invoices'),
+			customers: await deriveDatabaseName(prfOutput, 'customers'),
+			settings: await deriveDatabaseName(prfOutput, 'settings')
+		},
 		openOptions: async (/** @type {string} */ name) =>
 			(storagesByCollection[name] = await memoryStorages())
 	});

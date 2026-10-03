@@ -48,7 +48,7 @@
 		"@helia/libp2p": "1.0.6",
 		"@ipld/dag-cbor": "10.0.1",
 		"@le-space/invoice": "workspace:*",
-		"@le-space/orbitdb-identity-provider-webauthn-did": "0.8.0",
+		"@le-space/orbitdb-identity-provider-webauthn-did": "0.9.1",
 		"@le-space/ucep": "0.2.0-draft.4",
 		"@libp2p/circuit-relay-v2": "4.2.9",
 		"@libp2p/crypto": "5.1.23",

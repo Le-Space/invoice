@@ -7,10 +7,10 @@
 // `createOrbitDBInstance`.
 // Changed: always persistent (no memory mode, so `keepLogsWhereTheChoiceSays`
 // has nothing to decide and is not needed); no network (see network.js); no
-// todo list, delegation, relay or diagnostics code; the database key is
-// derived from the passkey's PRF output before anything is opened, and the
-// same PRF answer seeds the identity's signing key, which spares the passkey
-// the provider's own PRF prompt. That key lives in a session-only keystore
+// todo list, delegation, relay or diagnostics code; the database key comes
+// from the books' vault (books-vault.js), opened with the passkey's PRF output
+// before anything else is, and the same PRF answer seeds the identity's
+// signing key, which spares the passkey the provider's own PRF prompt. That key lives in a session-only keystore
 // (session-identities.js) and the libp2p peer key is ephemeral (network.js):
 // no private key is kept in IndexedDB or localStorage.
 
@@ -28,7 +28,7 @@ import {
 import * as dagCbor from '@ipld/dag-cbor';
 
 import { createEphemeralPeerKey, createOfflineLibp2p } from './network.js';
-import { deriveDatabaseKey, derivePeerKeySeed } from './database-keys.js';
+import { openBooksVault } from './books-vault.js';
 import { readPrfOutput } from './passkey-identity.js';
 import { createSessionIdentities } from './session-identities.js';
 import { openStore } from './store/repository.js';
@@ -49,9 +49,9 @@ export const STORAGE_PATHS = Object.freeze({
  * @property {Awaited<ReturnType<typeof openStore>>} store
  * @property {string} identityHash the identity document's hash
  * @property {string} peerId this session's libp2p peer id
- * @property {Uint8Array} ucepSeed the seed of the UCEP node's peer key, derived from the passkey
+ * @property {Uint8Array} ucepSeed the seed of the UCEP node's peer key, from the books' vault
  * @property {() => Promise<void>} stop
- * @property {{ signingKey: Uint8Array, databaseKey: Uint8Array, peerKey: Uint8Array }} [secretsForE2E]
+ * @property {{ signingKey: Uint8Array, databaseKey: Uint8Array, peerKey: Uint8Array, ucepSeed: Uint8Array }} [secretsForE2E]
  *   only in E2E builds
  */
 
@@ -72,9 +72,16 @@ export async function startSession(credential) {
 	// First, and before anything is opened: without PRF there is no key, and
 	// without a key nothing is read or written. No plaintext fallback.
 	const prfOutput = await readPrfOutput(credential);
-	const encryptionKey = await deriveDatabaseKey(prfOutput);
+	// The key, the names and the UCEP seed come from the books' vault, which any
+	// passkey with a slot opens. The first unlock fills it with what this passkey
+	// derives, so books made before the vault are found where they are.
+	const { values } = await openBooksVault({
+		prfOutput,
+		rawCredentialId: credential.rawCredentialId
+	});
+	const encryptionKey = values.dbKey;
 	// The UCEP node's key (ucep/net.js): the same peer id on every unlock.
-	const ucepSeed = await derivePeerKeySeed(prfOutput);
+	const ucepSeed = values.peerSeed;
 
 	const blockstore = new LevelBlockstore(STORAGE_PATHS.blockstore);
 	const datastore = new LevelDatastore(STORAGE_PATHS.datastore);
@@ -116,7 +123,7 @@ export async function startSession(credential) {
 			identity,
 			directory: STORAGE_PATHS.orbitdb
 		});
-		const store = await openStore({ orbitdb, encryptionKey, prfOutput });
+		const store = await openStore({ orbitdb, encryptionKey, names: values.names });
 
 		return {
 			did: identity.id,
@@ -131,7 +138,8 @@ export async function startSession(credential) {
 						secretsForE2E: {
 							signingKey,
 							databaseKey: encryptionKey,
-							peerKey: peerKey.raw
+							peerKey: peerKey.raw,
+							ucepSeed
 						}
 					}
 				: {}),
