@@ -392,6 +392,118 @@ export async function removeBooksSlot(opened, rawCredentialId, storage = localSt
 	return { ...opened, vault };
 }
 
+/**
+ * Is there a vault in this browser with a slot for this passkey — and was it
+ * removed from books here? Neither means: unlocking would make new books.
+ *
+ * @param {Uint8Array} rawCredentialId
+ * @param {Storage} [storage]
+ * @returns {Promise<{ slot: boolean, removed: boolean }>}
+ */
+export async function booksHereFor(rawCredentialId, storage = localStorage) {
+	const kid = await slotIdFor(rawCredentialId);
+	return {
+		slot: loadVaults(storage).some((vault) =>
+			vault?.slots?.some((/** @type {any} */ s) => s?.kid === kid)
+		),
+		removed: removedSlots(storage).includes(kid)
+	};
+}
+
+const isHex = (/** @type {unknown} */ value, /** @type {number} */ bytes) =>
+	typeof value === 'string' &&
+	(bytes ? value.length === 2 * bytes : value.length > 0) &&
+	/^[0-9a-f]+$/.test(value);
+
+/**
+ * A vault record, as a backup carries it in front: checked for the shape of a
+ * version-1 vault and copied field by field, nothing else kept.
+ *
+ * @param {unknown} value
+ * @returns {any}
+ * @throws {VaultStorageError}
+ */
+function vaultRecordOf(value) {
+	const vault = /** @type {any} */ (value);
+	const ok =
+		vault?.version === 1 &&
+		vault?.algorithm === 'AES-GCM' &&
+		isHex(vault?.id, 16) &&
+		isHex(vault?.payload?.iv, 12) &&
+		isHex(vault?.payload?.ciphertext, 0) &&
+		Array.isArray(vault?.slots) &&
+		vault.slots.length > 0 &&
+		vault.slots.every(
+			(/** @type {any} */ s) => isHex(s?.kid, 32) && isHex(s?.iv, 12) && isHex(s?.ciphertext, 48)
+		);
+	if (!ok) throw new VaultStorageError('Diese Sicherung enthält keinen lesbaren Tresor.');
+	return {
+		version: vault.version,
+		algorithm: vault.algorithm,
+		id: vault.id,
+		payload: { iv: vault.payload.iv, ciphertext: vault.payload.ciphertext },
+		slots: vault.slots.map((/** @type {any} */ s) => ({
+			kid: s.kid,
+			iv: s.iv,
+			ciphertext: s.ciphertext
+		}))
+	};
+}
+
+/**
+ * Does a vault from a backup have a slot for this passkey?
+ *
+ * @param {unknown} vault
+ * @param {Uint8Array} rawCredentialId
+ */
+export async function vaultHasSlotFor(vault, rawCredentialId) {
+	const kid = await slotIdFor(rawCredentialId);
+	const slots = /** @type {any} */ (vault)?.slots;
+	return Array.isArray(slots) && slots.some((s) => s?.kid === kid);
+}
+
+/**
+ * Put the vault a backup carries into this browser, so that its passkeys open
+ * the books here (Le-Space/invoice#28). A vault with the same id stays as it
+ * is: these are the same books, and the one here may be newer. A vault for
+ * other books, which one of its passkeys already opens here, is refused.
+ *
+ * @param {unknown} vault from the backup's header
+ * @param {Storage} [storage]
+ * @returns {{ installed: boolean, id: string }}
+ * @throws {VaultStorageError}
+ */
+export function installBooksVault(vault, storage = localStorage) {
+	const record = vaultRecordOf(vault);
+	const vaults = loadVaults(storage);
+	if (vaults.some((candidate) => candidate?.id === record.id)) {
+		return { installed: false, id: record.id };
+	}
+	const kids = new Set(record.slots.map((/** @type {any} */ s) => s.kid));
+	if (
+		vaults.some((candidate) => candidate?.slots?.some((/** @type {any} */ s) => kids.has(s?.kid)))
+	) {
+		throw new VaultStorageError(
+			'Ein Schlüssel dieser Sicherung öffnet in diesem Browser schon andere Bücher; die Sicherung wird nicht eingespielt.'
+		);
+	}
+	saveVaults(storage, [...vaults, record]);
+	return { installed: true, id: record.id };
+}
+
+/**
+ * Take a vault out again that was put here for a restore that did not finish.
+ *
+ * @param {string} id
+ * @param {Storage} [storage]
+ */
+export function uninstallBooksVault(id, storage = localStorage) {
+	saveVaults(
+		storage,
+		loadVaults(storage).filter((candidate) => candidate?.id !== id)
+	);
+}
+
 /** @param {Storage} storage @returns {string[]} */
 function removedSlots(storage) {
 	try {

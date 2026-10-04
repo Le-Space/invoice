@@ -11,7 +11,14 @@ import {
 	restorePasskeyCredential
 } from './passkey-identity.js';
 import { WebAuthnDIDProvider, slotIdFor } from '@le-space/orbitdb-identity-provider-webauthn-did';
-import { addBooksSlot, booksSlotIds, removeBooksSlot } from './books-vault.js';
+import {
+	addBooksSlot,
+	booksHereFor,
+	booksSlotIds,
+	installBooksVault,
+	removeBooksSlot,
+	uninstallBooksVault
+} from './books-vault.js';
 import {
 	forgetPasskey,
 	keepDefaultAside,
@@ -27,11 +34,13 @@ import {
 	backupMoment,
 	buildBackup,
 	creditsOf,
+	findBackups,
 	isAddress,
 	isGranted,
 	keepBackup,
 	loadBackupOwner,
 	loadBackups,
+	pickBackup,
 	rememberBackup,
 	saveBackupOwner
 } from './backup.js';
@@ -84,6 +93,15 @@ export const app = $state({
 		error: null,
 		/** @type {import('./backup.js').BackupRecord | null} the one made just now */
 		made: null
+	},
+	/** Books brought back from a backup on an empty device (backup.js). */
+	restore: {
+		/** @type {'' | 'searching' | 'passkey' | 'fetching' | 'unlocking' | 'restoring'} */
+		step: '',
+		/** @type {number | null} backups found for the account */
+		found: null,
+		/** @type {{ at: string } | null} which backup the books came back from */
+		done: null
 	},
 	/** @type {StoredRecord[]} */
 	customers: [],
@@ -419,13 +437,19 @@ async function unlockWith(credential) {
 	// The passkey that unlocked is the one the button uses next time.
 	makeDefaultPasskey(session.credentialId);
 	await refreshKeys();
-	for (const name of /** @type {const} */ (['invoices', 'customers', 'settings'])) {
-		session.store[name].onChange(scheduleRefresh);
-	}
+	watchStore();
 	await refresh();
 	installE2EHooks();
 	// Not awaited: the books are open, whatever the relay does.
 	startUcepIfPaired();
+}
+
+/** Refresh the pages when the books change — again after a restore reopened the store. */
+function watchStore() {
+	if (!session) return;
+	for (const name of /** @type {const} */ (['invoices', 'customers', 'settings'])) {
+		session.store[name].onChange(scheduleRefresh);
+	}
 }
 
 /**
@@ -457,10 +481,107 @@ export function createPasskey(label) {
 }
 
 export function restorePasskey() {
-	return run(() => {
+	return run(async () => {
 		keepDefaultAside();
-		return restorePasskeyCredential();
+		const credential = await restorePasskeyCredential();
+		if (!credential) return null;
+		// An empty device looks for a backup before it makes new books
+		// (Le-Space/invoice#28): unlocking a passkey this browser has no books for
+		// would start empty ones. A removed passkey is turned away as before.
+		const here = await booksHereFor(credential.rawCredentialId);
+		if (!here.slot && !here.removed && !window.confirm(t('onboarding.noBooksHere'))) {
+			forgetPasskey(credential.credentialId);
+			throw new Error(t('onboarding.noNewBooks'));
+		}
+		return credential;
 	}, t('onboarding.restoreFailed'));
+}
+
+/**
+ * "Bücher aus einer Sicherung holen": on an empty device, with nothing but the
+ * paying account's address and a passkey registered for the books. The
+ * account's backups are listed on Aleph; the passkey is fetched from its
+ * authenticator (two touches); the newest backup whose vault has a slot for it
+ * is fetched, its vault put into this browser, the books unlocked as usual
+ * (one touch) and the backup put back into them.
+ *
+ * @param {string} ownerAddress
+ */
+export async function restoreFromBackup(ownerAddress) {
+	if (app.status === 'starting') return;
+	app.status = 'starting';
+	app.error = null;
+	app.restore = { step: 'searching', found: null, done: null };
+	/** @type {string | null} */
+	let installed = null;
+	let unlocked = false;
+	try {
+		if (!isAddress(ownerAddress)) throw new Error(t('restore.ownerInvalid'));
+		const { toChecksumAddress } = await import('./aleph-signer.js');
+		const stores = await findBackups({ owner: toChecksumAddress(ownerAddress.trim()) });
+		app.restore.found = stores.length;
+		if (stores.length === 0) throw new Error(t('restore.none'));
+
+		app.restore.step = 'passkey';
+		keepDefaultAside();
+		const credential = await restorePasskeyCredential();
+		if (!credential) throw new Error(t('onboarding.restoreFailed'));
+
+		app.restore.step = 'fetching';
+		const { picked, unreachable } = await pickBackup({
+			stores,
+			rawCredentialId: credential.rawCredentialId
+		});
+		if (!picked) {
+			throw new Error(
+				unreachable === stores.length ? t('restore.unreachable') : t('restore.noSlot')
+			);
+		}
+		const placed = installBooksVault(picked.vault);
+		if (placed.installed) installed = placed.id;
+
+		app.restore.step = 'unlocking';
+		await unlockWith(credential);
+		unlocked = true;
+		installed = null; // the books are open: the vault stays
+
+		app.restore.step = 'restoring';
+		const restored = await /** @type {Session} */ (session).restoreBackup(picked.bytes);
+		watchStore();
+		// The backup the books came back from: in the list, as if made here, so
+		// Einstellungen → Sicherung names it. It cannot carry its own record.
+		const settings = /** @type {Session} */ (session).store.settings;
+		if (!(await loadBackups(settings)).some((r) => r.itemHash === picked.store.itemHash)) {
+			await rememberBackup(settings, {
+				at: picked.at,
+				cid: picked.cid,
+				size: picked.bytes.length,
+				status: 'processed',
+				itemHash: picked.store.itemHash,
+				owner: picked.store.owner,
+				sender: picked.store.sender,
+				entries: Object.fromEntries(
+					restored.manifest.metadata.databases.map((/** @type {any} */ d) => [
+						d.collection,
+						d.entryCount
+					])
+				)
+			});
+		}
+		await refresh();
+		app.restore.done = { at: picked.at };
+		app.status = 'ready';
+	} catch (error) {
+		console.error('restoring from a backup failed:', error);
+		if (installed) uninstallBooksVault(installed);
+		// Opened, but not put back: shut again. The vault stays, so trying again
+		// opens the same books and merges once more.
+		if (unlocked) await lock();
+		app.status = 'error';
+		app.error = error instanceof Error ? error.message : String(error);
+	} finally {
+		app.restore.step = '';
+	}
 }
 
 /**
@@ -492,6 +613,7 @@ export async function lock() {
 	app.settings = null;
 	app.keys = [];
 	app.keysError = null;
+	app.restore = { step: '', found: null, done: null };
 	app.backup = {
 		address: null,
 		owner: null,

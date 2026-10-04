@@ -9,13 +9,17 @@ import {
 	VAULT_SLOT_INFO,
 	VaultStorageError,
 	addBooksSlot,
+	booksHereFor,
 	booksSlotIds,
 	deriveBooksValues,
 	ensureBackupKeys,
 	ensureBooksSecret,
+	installBooksVault,
 	openBooksVault,
 	removeBooksSlot,
-	updateBooksVault
+	uninstallBooksVault,
+	updateBooksVault,
+	vaultHasSlotFor
 } from './books-vault.js';
 import { isAlephKey } from './aleph-key.js';
 import { deriveDatabaseKey, deriveDatabaseName, derivePeerKeySeed } from './database-keys.js';
@@ -285,5 +289,80 @@ describe('books vault', () => {
 		await addBooksSlot(await openBooksVault({ ...b, storage }), a, storage);
 		const backA = await openBooksVault({ ...a, storage });
 		expect(hex(backA.values.dbKey)).toBe(hex(opened.values.dbKey));
+	});
+
+	it('a vault from a backup goes into an empty browser, and its passkeys open the books there', async () => {
+		const here = memoryStorage();
+		const a = passkey();
+		const b = passkey();
+		const made = await addBooksSlot(
+			await ensureBackupKeys(
+				await ensureBooksSecret(await openBooksVault({ ...a, storage: here }), here),
+				here
+			),
+			b,
+			here
+		);
+		const record = JSON.parse(JSON.stringify(made.vault));
+
+		// An empty browser: no books for B, not removed either.
+		const empty = memoryStorage();
+		expect(await booksHereFor(b.rawCredentialId, empty)).toEqual({ slot: false, removed: false });
+		expect(await vaultHasSlotFor(record, b.rawCredentialId)).toBe(true);
+		expect(await vaultHasSlotFor(record, passkey().rawCredentialId)).toBe(false);
+
+		// Fields beyond the vault's own are not kept.
+		expect(installBooksVault({ ...record, note: 'from somewhere' }, empty)).toEqual({
+			installed: true,
+			id: record.id
+		});
+		expect(JSON.parse(/** @type {string} */ (empty.getItem(VAULTS_STORAGE_KEY)))[0]).toEqual(
+			record
+		);
+		expect(await booksHereFor(b.rawCredentialId, empty)).toEqual({ slot: true, removed: false });
+
+		// B opens the same books there: the same key, names and backup keys.
+		const viaB = await openBooksVault({ ...b, storage: empty });
+		expect(viaB.created).toBe(false);
+		expect(hex(viaB.values.dbKey)).toBe(hex(made.values.dbKey));
+		expect(viaB.values.names).toEqual(made.values.names);
+		expect(hex(/** @type {Uint8Array} */ (viaB.values.backupKey))).toBe(
+			hex(/** @type {Uint8Array} */ (made.values.backupKey))
+		);
+
+		// The same vault again stays as it is here; taking it out leaves nothing.
+		expect(installBooksVault(record, empty)).toEqual({ installed: false, id: record.id });
+		uninstallBooksVault(record.id, empty);
+		expect(JSON.parse(/** @type {string} */ (empty.getItem(VAULTS_STORAGE_KEY)))).toEqual([]);
+	});
+
+	it('a backup’s vault is refused when it is no vault, or when its passkey opens other books here', async () => {
+		const here = memoryStorage();
+		const a = passkey();
+		const ours = await openBooksVault({ ...a, storage: here });
+		const record = JSON.parse(JSON.stringify(ours.vault));
+		for (const broken of [
+			null,
+			{ ...record, version: 2 },
+			{ ...record, id: 'zz' },
+			{ ...record, slots: [] },
+			{ ...record, slots: [{ ...record.slots[0], kid: 'abc' }] },
+			{ ...record, payload: { iv: record.payload.iv } }
+		]) {
+			expect(() => installBooksVault(broken, memoryStorage())).toThrow(VaultStorageError);
+		}
+
+		// Other books in this browser that A opens already: a backup with A's slot is not put in.
+		const other = memoryStorage();
+		await openBooksVault({ ...a, storage: other });
+		const otherBooks = JSON.parse(/** @type {string} */ (other.getItem(VAULTS_STORAGE_KEY)))[0];
+		expect(otherBooks.id).not.toBe(record.id);
+		expect(() => installBooksVault(otherBooks, here)).toThrow(/schon andere Bücher/);
+
+		// A passkey removed here is reported as removed, not as having no books.
+		const b = passkey();
+		const withB = await addBooksSlot(ours, b, here);
+		await removeBooksSlot(withB, b.rawCredentialId, here);
+		expect(await booksHereFor(b.rawCredentialId, here)).toEqual({ slot: false, removed: true });
 	});
 });

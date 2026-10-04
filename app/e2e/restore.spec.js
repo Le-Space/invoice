@@ -1,0 +1,165 @@
+// "Bücher aus einer Sicherung holen" (Le-Space/invoice#28): the acceptance of
+// the two-keys plan's phase 3, in a browser. Books made with key A, key B
+// added, a backup kept on (a fake) Aleph; then the browser forgets everything,
+// and key B alone — with nothing but the paying account's address — brings the
+// books back: what A wrote, the same books identity, and B writes on.
+//
+// Two virtual authenticators on one page, as in keys.spec.js: the device's own
+// passkey (A) and a security key on USB (B), each with its own PRF secret; only
+// the key being "touched" answers. Every key, address and amount is made up.
+import { test, expect } from '@playwright/test';
+
+import { toChecksumAddress } from '../src/lib/aleph-signer.js';
+import { startFakeAleph } from './fake-aleph.js';
+import { forgetThisDevice, recordCeremonies, takeCeremonies } from './webauthn.js';
+
+const OWNER = toChecksumAddress(`0x${'7a'.repeat(20)}`);
+const KEY = {
+	protocol: 'ctap2',
+	ctap2Version: 'ctap2_1',
+	transport: 'internal',
+	hasResidentKey: true,
+	hasUserVerification: true,
+	isUserVerified: true,
+	hasLargeBlob: true,
+	hasPrf: true,
+	automaticPresenceSimulation: true
+};
+
+/** @type {Awaited<ReturnType<typeof startFakeAleph>>} */ let aleph;
+
+test.beforeAll(async () => {
+	aleph = await startFakeAleph();
+});
+test.afterAll(async () => {
+	await aleph?.close();
+});
+
+/** @param {import('@playwright/test').Page} page @param {string} customer */
+async function issue(page, customer) {
+	await page.getByRole('link', { name: 'Rechnungen', exact: true }).click();
+	await page.getByTestId('new-template').selectOption('usdc-base');
+	await page.getByTestId('new-invoice').click();
+	await expect(page.getByTestId('draft-editor')).toBeVisible();
+	await page.getByTestId('customer-name').fill(customer);
+	await page.getByTestId('customer-address').fill('Beispielweg 2\n54321 Beispielstadt');
+	await page.getByTestId('line-description').fill('Serverbetrieb');
+	await page.getByTestId('line-price').fill('12,5');
+	const delivery = await page.getByTestId('delivery-date').inputValue();
+	await page.getByTestId('rate-per-unit').fill('0,9123');
+	await page.getByTestId('rate-source').fill('CoinGecko');
+	await page.getByTestId('rate-date').fill(delivery);
+	page.once('dialog', (dialog) => dialog.accept());
+	await page.getByTestId('issue').click();
+	await expect(page.getByTestId('issued-invoice')).toBeVisible();
+	const heading = /** @type {string} */ (await page.getByRole('heading').first().textContent());
+	return /** @type {string} */ (heading.match(/\d{4}-\d{5}-\d{3}/)?.[0]);
+}
+
+/** @param {import('@playwright/test').Page} page */
+async function invoiceNumbers(page) {
+	await page.getByRole('link', { name: 'Rechnungen', exact: true }).click();
+	await expect(page.getByTestId('invoice-row').first()).toBeVisible();
+	const rows = await page.getByTestId('invoice-row').allTextContents();
+	return rows.map((row) => row.match(/\d{4}-\d{5}-\d{3}/)?.[0]).sort();
+}
+
+test('key B alone brings the books back from a backup on an empty device, and writes on', async ({
+	page
+}) => {
+	test.setTimeout(300_000);
+	await page.addInitScript((url) => localStorage.setItem('invoice.e2e.alephUrl', url), aleph.url);
+	const cdp = await page.context().newCDPSession(page);
+	await cdp.send('WebAuthn.enable');
+	const { authenticatorId: keyA } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+		options: KEY
+	});
+	/** @param {string} authenticatorId @param {boolean} enabled */
+	const presence = (authenticatorId, enabled) =>
+		cdp.send('WebAuthn.setAutomaticPresenceSimulation', { authenticatorId, enabled });
+	await recordCeremonies(page);
+
+	// Books made with key A, with an invoice in them.
+	await page.goto('/');
+	await page.getByTestId('passkey-label').fill('Laptop');
+	await page.getByRole('button', { name: 'Passkey anlegen' }).click();
+	await expect(page.getByTestId('own-did')).toBeVisible();
+	await page.getByRole('link', { name: 'Einstellungen' }).click();
+	await page.getByTestId('issuer-name').fill('Wolkenfabrik Hosting UG');
+	await page.getByTestId('issuer-address').fill('Musterstraße 1\n12345 Musterstadt');
+	await page.getByTestId('crypto-eth').fill('0x0000000000000000000000000000000000000001');
+	await page.getByTestId('save-settings').click();
+	await expect(page.getByRole('status').first()).toContainText('Gespeichert');
+	const first = await issue(page, 'Erster Kunde AG');
+	const booksDid = await page.evaluate(() => /** @type {any} */ (window).__invoiceE2E.booksDid());
+
+	// Key B added; from now on only B answers.
+	const { authenticatorId: keyB } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+		options: { ...KEY, transport: 'usb' }
+	});
+	await presence(keyA, false);
+	await page.getByRole('link', { name: 'Einstellungen' }).click();
+	await page.getByTestId('key-label').fill('YubiKey Schublade');
+	await page.getByTestId('key-add').click();
+	await expect(page.getByTestId('key-row')).toHaveCount(2);
+
+	// A backup, kept for the paying account (grant and credits done in the fake).
+	const section = page.getByTestId('backup');
+	await expect(section.getByTestId('backup-address')).toHaveText(/0x[0-9a-fA-F]{40}/);
+	const address = /** @type {string} */ (
+		await section.getByTestId('backup-address').textContent()
+	).trim();
+	aleph.grant(OWNER, { address, types: ['STORE'], channels: ['INVOICE-BACKUP'], chain: 'ETH' });
+	aleph.fund(OWNER, 1_000_000);
+	await section.getByTestId('backup-owner').fill(OWNER);
+	await section.getByTestId('backup-owner-save').click();
+	await expect(section.getByTestId('backup-granted')).toBeVisible();
+	await section.getByTestId('backup-now').click();
+	await expect(section.getByTestId('backup-made')).toContainText('von Aleph aufbewahrt', {
+		timeout: 60_000
+	});
+
+	// The device forgets everything: no passkey, no vault, no books. Key A is
+	// gone with the old device; key B is the one at hand.
+	await presence(keyB, true);
+	await forgetThisDevice(page);
+	await page.goto('/');
+	await expect(page.getByTestId('passkey-onboarding')).toBeVisible();
+	await expect(page.getByTestId('passkey-unlock')).toHaveCount(0);
+	await takeCeremonies(page);
+
+	// "Passkey wiederherstellen" would start empty books here: it asks first.
+	// Declined, nothing is made, and the passkey is not kept.
+	/** @type {string[]} */ const asked = [];
+	page.once('dialog', (dialog) => {
+		asked.push(dialog.message());
+		void dialog.dismiss();
+	});
+	await page.getByTestId('passkey-restore').click();
+	await expect(page.getByTestId('passkey-error')).toContainText('keine neuen Bücher angelegt');
+	expect(asked[0]).toContain('Bücher aus einer Sicherung holen');
+	await expect(page.getByTestId('passkey-unlock')).toHaveCount(0);
+	await takeCeremonies(page);
+
+	// Key B and the account's address: the books come back.
+	await page.getByTestId('restore-owner').fill(OWNER);
+	await page.getByTestId('restore-start').click();
+	await expect(page.getByTestId('own-did')).toBeVisible({ timeout: 90_000 });
+	await expect(page.getByTestId('restore-done')).toContainText('Aus der Sicherung vom');
+	// The passkey from its authenticator, then the one PRF answer that unlocks.
+	expect((await takeCeremonies(page)).map((c) => c.kind)).toEqual(['get', 'get', 'get']);
+
+	// The same books: A's invoice, the same identity, and both keys still in the vault.
+	expect(await invoiceNumbers(page)).toEqual([first]);
+	expect(await page.evaluate(() => /** @type {any} */ (window).__invoiceE2E.booksDid())).toBe(
+		booksDid
+	);
+	await page.getByRole('link', { name: 'Einstellungen' }).click();
+	await expect(page.getByTestId('key-row')).toHaveCount(2);
+	await expect(page.getByTestId('backup').getByTestId('backup-row')).toHaveCount(1);
+
+	// B writes on, in a number circle of its own.
+	const second = await issue(page, 'Zweiter Kunde GmbH');
+	expect(second.split('-')[1]).not.toBe(first.split('-')[1]);
+	expect(await invoiceNumbers(page)).toEqual([first, second].sort());
+});

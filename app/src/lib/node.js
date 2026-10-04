@@ -38,7 +38,10 @@ import {
 import { MOVE_RECORD_KEY, booksAccessController, moveBooks } from './books-move.js';
 import { readPrfOutput } from './passkey-identity.js';
 import { BOOKS_IDENTITY_INFO, createBooksIdentities } from './session-identities.js';
+import { backupCipher } from './backup.js';
+import { payloadEncryption } from './entry-encryption.js';
 import { openStore } from './store/repository.js';
+import SealedDocuments from './store/sealed-documents.js';
 import { setSetting } from './store/settings.js';
 
 /**
@@ -58,7 +61,9 @@ export const STORAGE_PATHS = Object.freeze({
  * @property {string} credentialId the passkey that unlocked, base64url
  * @property {{ values: any, vault: any, vaultKey: Uint8Array }} vault the books' vault, open:
  *   what adding and removing a passkey works on (books-vault.js)
- * @property {Awaited<ReturnType<typeof openStore>>} store
+ * @property {Awaited<ReturnType<typeof openStore>>} store reopened after a restore: read it from the session each time
+ * @property {(bytes: Uint8Array, options?: { onProgress?: (progress: any) => void }) => Promise<{ manifest: any, databases: { collection?: string, joined: number, entries: number | null }[] }>} restoreBackup
+ *   put a backup of these books back in, merging (backup.js, Le-Space/invoice#28)
  * @property {string} identityHash the identity document's hash
  * @property {string} peerId this session's libp2p peer id
  * @property {Uint8Array} ucepSeed the seed of the UCEP node's peer key, from the books' vault
@@ -157,13 +162,15 @@ export async function startSession(credential) {
 			});
 		}
 
-		const store = await openStore({
-			orbitdb,
-			encryptionKey,
-			names: values.names,
-			author: did,
-			accessController: booksAccessController(books.did)
-		});
+		const open = () =>
+			openStore({
+				orbitdb,
+				encryptionKey,
+				names: values.names,
+				author: did,
+				accessController: booksAccessController(books.did)
+			});
+		const store = await open();
 
 		if (move) {
 			const at = new Date().toISOString();
@@ -173,7 +180,8 @@ export async function startSession(credential) {
 			opened = await updateBooksVault(opened, { ...values, moved: { at, from: move.from } });
 		}
 
-		return {
+		/** @type {Session} */
+		const session = {
 			did,
 			booksDid: identity.id,
 			credentialId: credential.credentialId,
@@ -196,12 +204,51 @@ export async function startSession(credential) {
 						}
 					}
 				: {}),
+			/**
+			 * A backup of these books, put back in: opened with the vault's backup
+			 * key, every block back into the blockstore, every collection rejoined
+			 * at its address. Merging — what is here stays, nothing is deleted;
+			 * a backup of other books is refused. The store is closed and opened
+			 * again around it.
+			 */
+			async restoreBackup(bytes, { onProgress } = {}) {
+				const { openAppBackup, restoreAppBackup } = await import(
+					'@le-space/orbitdb-storage-bridge/app-backup'
+				);
+				const { decrypt } = await backupCipher(/** @type {Uint8Array} */ (values.backupKey));
+				const backup = await openAppBackup(bytes, { decrypt, app: 'invoice' });
+				const addresses = Object.fromEntries(
+					Object.entries(session.store.databases()).map(([name, db]) => [
+						name,
+						db.address.toString()
+					])
+				);
+				await session.store.close();
+				try {
+					const restored = await restoreAppBackup({
+						orbitdb,
+						opened: backup,
+						addresses,
+						open: {
+							type: SealedDocuments.type,
+							Database: SealedDocuments({ indexBy: 'id' }),
+							encryption: await payloadEncryption(encryptionKey),
+							AccessController: booksAccessController(books.did)
+						},
+						onProgress
+					});
+					return { manifest: backup.manifest, ...restored };
+				} finally {
+					session.store = await open();
+				}
+			},
 			async stop() {
-				await store.close();
+				await session.store.close();
 				await orbitdb.stop();
 				await helia.stop();
 			}
 		};
+		return session;
 	} catch (error) {
 		await helia.stop().catch(() => {});
 		throw error;

@@ -26,6 +26,7 @@
 // The storage bridge and the curve code are loaded only here, when a backup is
 // made or checked, not with the page.
 
+import { vaultHasSlotFor } from './books-vault.js';
 import { getSetting, setSetting } from './store/settings.js';
 
 /** The Aleph channel invoice's backups are kept on, and found by. */
@@ -327,4 +328,91 @@ export async function keepBackup({
 		throw new BackupRefusedError('rejected', { errorCode: final.errorCode ?? null });
 	}
 	return { cid: handle.id, itemHash: sent.itemHash, status: final.status, sender };
+}
+
+/**
+ * The backups kept for the paying account, newest first, from Aleph's public
+ * messages API — all an empty device needs is the account's address.
+ *
+ * @param {{ owner: string, endpoints?: AlephEndpoints, fetch?: typeof fetch }} params
+ * @returns {Promise<{ cid: string, itemHash: string, sender: string, owner: string, time: number }[]>}
+ */
+export async function findBackups({ owner, endpoints = alephEndpoints(), fetch: f }) {
+	const { listAlephStores } = await import('@le-space/orbitdb-storage-bridge/backends/aleph-pin');
+	const { stores } = await listAlephStores({
+		owner,
+		channel: BACKUP_CHANNEL,
+		apiHost: endpoints.apiHost,
+		...(f ? { fetch: f } : {})
+	});
+	return stores;
+}
+
+/**
+ * A backup file, from Aleph's gateway.
+ *
+ * @param {string} cid
+ * @param {{ endpoints?: AlephEndpoints, fetch?: typeof fetch }} [options]
+ * @returns {Promise<Uint8Array>}
+ */
+export async function fetchBackup(cid, { endpoints = alephEndpoints(), fetch: f } = {}) {
+	const { fetchFromGateways } = await import('@le-space/orbitdb-storage-bridge/gateway-fetch');
+	return fetchFromGateways(cid, { gateways: endpoints.gateways, ...(f ? { fetchImpl: f } : {}) });
+}
+
+/**
+ * The vault a backup carries in front, read without any key.
+ *
+ * @param {Uint8Array} bytes
+ * @returns {Promise<any>}
+ */
+export async function vaultOfBackup(bytes) {
+	const { readAppBackupHeader } = await import('@le-space/orbitdb-storage-bridge/app-backup');
+	const { header } = readAppBackupHeader(bytes);
+	return JSON.parse(new TextDecoder().decode(header));
+}
+
+/**
+ * The newest backup whose vault has a slot for this passkey — found by the
+ * credential id alone, before any PRF is asked.
+ *
+ * @param {object} params
+ * @param {{ cid: string, time: number }[]} params.stores from `findBackups`, newest first
+ * @param {Uint8Array} params.rawCredentialId
+ * @param {(cid: string) => Promise<Uint8Array>} [params.fetchBytes]
+ * @param {number} [params.limit] how many backups are looked into
+ * @returns {Promise<{ picked: { bytes: Uint8Array, vault: any, at: string, cid: string, store: any } | null, unreachable: number }>}
+ *   `unreachable` counts the backups that could not be fetched or read
+ */
+export async function pickBackup({
+	stores,
+	rawCredentialId,
+	fetchBytes = (cid) => fetchBackup(cid),
+	limit = 20
+}) {
+	let unreachable = 0;
+	for (const store of stores.slice(0, limit)) {
+		let bytes;
+		let vault;
+		try {
+			bytes = await fetchBytes(store.cid);
+			vault = await vaultOfBackup(bytes);
+		} catch {
+			unreachable += 1;
+			continue;
+		}
+		if (await vaultHasSlotFor(vault, rawCredentialId)) {
+			return {
+				picked: {
+					bytes,
+					vault,
+					at: new Date(store.time * 1000).toISOString(),
+					cid: store.cid,
+					store
+				},
+				unreachable
+			};
+		}
+	}
+	return { picked: null, unreachable };
 }

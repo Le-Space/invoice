@@ -34,8 +34,10 @@ import {
 	backupMoment,
 	buildBackup,
 	creditsOf,
+	findBackups,
 	isGranted,
-	keepBackup
+	keepBackup,
+	pickBackup
 } from './backup.js';
 import { booksAccessController } from './books-move.js';
 import { ensureBackupKeys, ensureBooksSecret, openBooksVault } from './books-vault.js';
@@ -84,6 +86,7 @@ async function node(/** @type {string} */ label, /** @type {any} */ books) {
 /** @type {any} */ let opened;
 /** @type {any} */ let books;
 /** @type {any} */ let storeA;
+/** @type {{ prfOutput: Uint8Array, rawCredentialId: Uint8Array }} */ let passkeyA;
 
 beforeAll(async () => {
 	try {
@@ -92,12 +95,12 @@ beforeAll(async () => {
 		// already known
 	}
 	const storage = memoryStorage();
-	const passkey = {
+	passkeyA = {
 		prfOutput: crypto.getRandomValues(new Uint8Array(32)),
 		rawCredentialId: crypto.getRandomValues(new Uint8Array(16))
 	};
 	opened = await ensureBackupKeys(
-		await ensureBooksSecret(await openBooksVault({ ...passkey, storage }), storage),
+		await ensureBooksSecret(await openBooksVault({ ...passkeyA, storage }), storage),
 		storage
 	);
 	books = await createSecretSigner(opened.values.booksSecret, { info: BOOKS_IDENTITY_INFO });
@@ -392,5 +395,93 @@ describe('keeping it on Aleph', () => {
 				fetch: /** @type {any} */ (none.fetchImpl)
 			})
 		).toBe(false);
+	});
+});
+
+describe('finding the backup on an empty device', () => {
+	const OWNER = toChecksumAddress(`0x${'ab'.repeat(20)}`);
+
+	it('asks Aleph for the paying account’s backups on INVOICE-BACKUP, by owner', async () => {
+		/** @type {string[]} */ const asked = [];
+		const fetchImpl = async (/** @type {string} */ url) => {
+			asked.push(url);
+			return {
+				ok: true,
+				status: 200,
+				json: async () => ({
+					messages: [
+						{
+							item_hash: 'h1',
+							sender: '0x1111111111111111111111111111111111111111',
+							channel: BACKUP_CHANNEL,
+							content: { address: OWNER, item_type: 'ipfs', item_hash: 'QmOne', time: 10 }
+						}
+					],
+					pagination_total: 1
+				})
+			};
+		};
+		const stores = await findBackups({
+			owner: OWNER,
+			endpoints: { ingestUrl: '', apiHost: 'https://aleph.test', gateways: [] },
+			fetch: /** @type {any} */ (fetchImpl)
+		});
+		expect(stores.map((s) => s.cid)).toEqual(['QmOne']);
+		const url = new URL(asked[0]);
+		expect(url.searchParams.get('owners')).toBe(OWNER);
+		expect(url.searchParams.get('channels')).toBe(BACKUP_CHANNEL);
+	});
+
+	it('takes the newest backup this passkey has a slot in, skipping others’ and unreadable ones', async () => {
+		const ours = await buildBackup({
+			databases: storeA.databases(),
+			vault: opened.vault,
+			backupKey: opened.values.backupKey
+		});
+		// A backup of other books: another passkey's vault in front.
+		const elsewhere = memoryStorage();
+		const otherKey = {
+			prfOutput: crypto.getRandomValues(new Uint8Array(32)),
+			rawCredentialId: crypto.getRandomValues(new Uint8Array(16))
+		};
+		const other = await ensureBackupKeys(
+			await ensureBooksSecret(await openBooksVault({ ...otherKey, storage: elsewhere }), elsewhere),
+			elsewhere
+		);
+		const theirs = await buildBackup({
+			databases: storeA.databases(),
+			vault: other.vault,
+			backupKey: /** @type {Uint8Array} */ (other.values.backupKey)
+		});
+		/** @type {Record<string, Uint8Array>} */
+		const files = { QmTheirs: theirs.bytes, QmOurs: ours.bytes, QmBroken: text('not a backup') };
+		const fetchBytes = async (/** @type {string} */ cid) => {
+			if (cid === 'QmGone') throw new Error('404');
+			return files[cid];
+		};
+		const stores = [
+			{ cid: 'QmTheirs', time: 400 },
+			{ cid: 'QmGone', time: 300 },
+			{ cid: 'QmBroken', time: 250 },
+			{ cid: 'QmOurs', time: 200 },
+			{ cid: 'QmOlder', time: 100 }
+		];
+
+		const found = await pickBackup({
+			stores,
+			rawCredentialId: passkeyA.rawCredentialId,
+			fetchBytes
+		});
+		expect(found.unreachable).toBe(2);
+		expect(found.picked?.cid).toBe('QmOurs');
+		expect(found.picked?.at).toBe(new Date(200_000).toISOString());
+		expect(found.picked?.vault).toEqual(opened.vault);
+
+		const none = await pickBackup({
+			stores,
+			rawCredentialId: crypto.getRandomValues(new Uint8Array(16)),
+			fetchBytes
+		});
+		expect(none.picked).toBeNull();
 	});
 });

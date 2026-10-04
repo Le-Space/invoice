@@ -8,7 +8,13 @@
 	// and the buttons act directly instead of feeding a consent dialog — a
 	// WebAuthn call needs the click's user gesture. The look follows
 	// apps/escrow01 at f0d3df4: a card on the brand tokens, one coral action.
-	import { app, createPasskey, restorePasskey, unlockStoredPasskey } from './session.svelte.js';
+	import {
+		app,
+		createPasskey,
+		restoreFromBackup,
+		restorePasskey,
+		unlockStoredPasskey
+	} from './session.svelte.js';
 	import { hasStoredPasskeyCredential } from './passkey-identity.js';
 	import { listStoredPasskeys } from './stored-passkeys.js';
 	import { t } from './i18n/index.js';
@@ -18,6 +24,7 @@
 	const storedPasskeys = listStoredPasskeys();
 	let chosen = $state(storedPasskeys[0]?.credentialId ?? '');
 	let label = $state('');
+	let owner = $state('');
 	let busy = $derived(app.status === 'starting');
 
 	const primary =
@@ -100,6 +107,40 @@
 		>
 			{t('onboarding.restore')}
 		</button>
+	</div>
+
+	<div class="mt-6 space-y-2 border-t border-border pt-4" data-testid="restore-backup">
+		<h2 class="text-xs font-semibold tracking-wide text-faint uppercase">
+			{t('restore.heading')}
+		</h2>
+		<p class="text-xs leading-relaxed text-faint">{t('restore.hint')}</p>
+		<label class="block text-sm font-medium text-heading" for="restore-owner"
+			>{t('restore.ownerLabel')}</label
+		>
+		<input
+			id="restore-owner"
+			type="text"
+			bind:value={owner}
+			placeholder={t('restore.ownerPlaceholder')}
+			autocomplete="off"
+			spellcheck="false"
+			class="w-full rounded-md border px-3 py-2 font-mono text-sm"
+			data-testid="restore-owner"
+		/>
+		<button
+			type="button"
+			class={secondary}
+			disabled={busy || !owner.trim()}
+			onclick={() => restoreFromBackup(owner)}
+			data-testid="restore-start"
+		>
+			{t('restore.start')}
+		</button>
+		{#if app.restore.step}
+			<p class="text-sm text-text" role="status" data-testid="restore-step">
+				{t(`restore.step.${app.restore.step}`, { found: String(app.restore.found ?? '') })}
+			</p>
+		{/if}
 	</div>
 
 	{#if busy}
