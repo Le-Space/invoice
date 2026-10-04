@@ -105,13 +105,14 @@ export default {
 	},
 	restore: {
 		heading: 'Bücher aus einer Sicherung holen',
-		hint: 'Auf einem leeren Gerät: Gib die Adresse des Aleph-Kontos ein, das deine Sicherungen bezahlt, und bestätige mit einem eingetragenen Passkey. Die neueste Sicherung, die dieser Passkey öffnet, kommt zurück; vorhandene Einträge bleiben.',
+		hint: 'Auf einem leeren Gerät brauchst du zwei Dinge: die Adresse des Aleph-Kontos, das deine Sicherungen bezahlt, und einen Passkey, der beim Sichern schon eingetragen war. Die neueste Sicherung, die dieser Passkey öffnet, kommt zurück; vorhandene Einträge bleiben.',
 		ownerLabel: 'Zahlendes Aleph-Konto',
 		ownerPlaceholder: '0x…',
 		start: 'Sicherung suchen und öffnen',
 		ownerInvalid: 'Das ist keine Adresse: 0x und 40 Hexadezimalzeichen.',
 		none: 'Für dieses Konto liegt bei Aleph keine Sicherung der Rechnungs-App.',
-		noSlot: 'Keine der Sicherungen dieses Kontos lässt sich mit diesem Passkey öffnen.',
+		noSlot:
+			'Keine der Sicherungen dieses Kontos lässt sich mit diesem Passkey öffnen. Eine Sicherung öffnen nur die Passkeys, die beim Sichern eingetragen waren.',
 		unreachable:
 			'Die Sicherungen dieses Kontos waren gerade nicht abzurufen. Bitte später noch einmal versuchen.',
 		step: {
@@ -131,13 +132,13 @@ export default {
 		unnamed: 'In diesem Browser nicht hinterlegt',
 		remove: 'Entfernen',
 		removeHint:
-			'Ein entfernter Schlüssel öffnet die Bücher nicht mehr. Was er schon geöffnet hat, kennt er aber weiter; gegen einen gestohlenen Schlüssel hilft nur ein erneuter Umzug.',
+			'Ein entfernter Schlüssel öffnet die Bücher in diesem Browser nicht mehr. Sicherungen aus der Zeit davor öffnet er aber weiter, und mit dem Dateischlüssel darin auch spätere; was er schon geöffnet hat, kennt er ohnehin. Gegen einen gestohlenen Schlüssel hilft nur ein erneuter Umzug.',
 		addLabel: 'Name für den neuen Schlüssel',
 		addPlaceholder: 'z. B. YubiKey Schublade',
 		add: 'Zweiten Schlüssel hinzufügen',
 		addMore: 'Weiteren Schlüssel hinzufügen',
 		addHint:
-			'Der neue Schlüssel wird zweimal gefragt: einmal zum Anlegen, einmal für sein Fach im Tresor.',
+			'Der neue Schlüssel wird zweimal gefragt: einmal zum Anlegen, einmal für sein Fach im Tresor. Danach neu sichern: Eine Sicherung öffnen nur die Schlüssel, die beim Sichern eingetragen waren.',
 		adding: 'Bitte den neuen Schlüssel bestätigen …',
 		removing: 'Wird entfernt …',
 		notCurrent:
@@ -149,12 +150,12 @@ export default {
 	backup: {
 		heading: 'Sicherung',
 		intro:
-			'Eine Sicherung enthält alle Rechnungen, Kunden und Einstellungen dieser Bücher, versiegelt mit einem Schlüssel aus dem Tresor. Jeder eingetragene Passkey öffnet sie, auch auf einem leeren Gerät. Aleph Cloud bewahrt sie auf; bezahlt wird das von einem Aleph-Konto, das den Sicherungsschlüssel dieser Bücher einmal freigibt.',
+			'Eine Sicherung enthält alle Rechnungen, Kunden und Einstellungen dieser Bücher, versiegelt mit einem Schlüssel aus dem Tresor. Öffnen kann sie jeder Passkey, der beim Sichern eingetragen war, auch auf einem leeren Gerät; ein später hinzugefügter erst die nächste Sicherung. Aleph Cloud bewahrt sie auf; bezahlt wird das von einem Aleph-Konto, das den Sicherungsschlüssel dieser Bücher einmal freigibt.',
 		address: 'Sicherungsschlüssel dieser Bücher',
 		ownerLabel: 'Zahlendes Aleph-Konto',
 		ownerPlaceholder: '0x…',
 		ownerHint:
-			'Die Adresse des Kontos der belege-Bridge; `pnpm setup:aleph` zeigt sie. Sie ist öffentlich. Auf einem leeren Gerät brauchst du sie zum Wiederherstellen.',
+			'Die Adresse des Kontos der belege-Bridge; `pnpm setup:aleph` zeigt sie. Sie ist öffentlich, doch ohne sie findet ein leeres Gerät keine Sicherung: Schreib sie auf, am besten dorthin, wo der zweite Schlüssel liegt.',
 		ownerSave: 'Konto übernehmen',
 		ownerInvalid: 'Das ist keine Adresse: 0x und 40 Hexadezimalzeichen.',
 		granted: 'Freigegeben: Dieser Schlüssel darf auf Kosten des Kontos sichern.',
@@ -181,6 +182,14 @@ export default {
 		refused:
 			'Aleph hat die Sicherung nicht behalten (Fehler {code}). Ist der Sicherungsschlüssel für dieses Konto freigegeben?',
 		failed: 'Die Sicherung ist fehlgeschlagen: {error}',
+		uncoveredOne:
+			'Die letzte Sicherung kennt den Schlüssel {key} noch nicht: Mit ihm allein kommen die Bücher nicht zurück. Sichere jetzt, dann öffnet jeder eingetragene Schlüssel die neue Sicherung.',
+		uncoveredMany:
+			'Die letzte Sicherung kennt diese Schlüssel noch nicht: {keys}. Mit ihnen allein kommen die Bücher nicht zurück. Sichere jetzt, dann öffnet jeder eingetragene Schlüssel die neue Sicherung.',
+		opens: 'Öffnet mit {keys}',
+		opensNone: 'Öffnet mit keinem der eingetragenen Schlüssel',
+		goneOne: 'außerdem mit einem entfernten Schlüssel',
+		goneMany: 'außerdem mit {count} entfernten Schlüsseln',
 		history: 'Bisherige Sicherungen',
 		none: 'Noch keine Sicherung.',
 		cid: 'Kennung',
