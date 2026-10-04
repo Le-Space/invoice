@@ -20,6 +20,21 @@ import {
 	rememberPasskey
 } from './stored-passkeys.js';
 import { getSetting } from './store/settings.js';
+import {
+	BackupRefusedError,
+	appRelease,
+	backupAddressOf,
+	backupMoment,
+	buildBackup,
+	creditsOf,
+	isAddress,
+	isGranted,
+	keepBackup,
+	loadBackupOwner,
+	loadBackups,
+	rememberBackup,
+	saveBackupOwner
+} from './backup.js';
 import { normaliseInvoiceSettings } from '@le-space/invoice/settings';
 import { foldCancellations, upgradeInvoice } from '@le-space/invoice/records';
 import { t } from './i18n/index.js';
@@ -49,6 +64,27 @@ export const app = $state({
 	keysStatus: 'idle',
 	/** @type {string | null} */
 	keysError: null,
+	/** The books' backup on Aleph (backup.js). */
+	backup: {
+		/** @type {string | null} the address of the books' Aleph key: what a grant names */
+		address: null,
+		/** @type {string | null} the paying account */
+		owner: null,
+		/** @type {boolean | null} whether the account lets this key keep backups; null: not known */
+		granted: null,
+		/** @type {number | null} the account's credits; null: not known */
+		credits: null,
+		/** @type {import('./backup.js').BackupRecord[]} newest first */
+		history: [],
+		/** @type {'' | 'packing' | 'sealing' | 'uploading' | 'keeping'} */
+		step: '',
+		/** @type {{ name: string, index: number, total: number } | null} */
+		progress: null,
+		/** @type {string | null} */
+		error: null,
+		/** @type {import('./backup.js').BackupRecord | null} the one made just now */
+		made: null
+	},
 	/** @type {StoredRecord[]} */
 	customers: [],
 	/** @type {ReturnType<typeof normaliseInvoiceSettings> | null} */
@@ -242,6 +278,113 @@ export async function removeKey(credentialId) {
 	}
 }
 
+/** The backup's state: this key's address, the paying account, its grant and credits, the backups made. */
+export async function refreshBackup() {
+	if (!session) return;
+	const { values } = session.vault;
+	const settings = session.store.settings;
+	app.backup.address = values.alephKey ? await backupAddressOf(values.alephKey) : null;
+	app.backup.owner = await loadBackupOwner(settings);
+	app.backup.history = await loadBackups(settings);
+	app.backup.granted = null;
+	app.backup.credits = null;
+	const { owner, address } = app.backup;
+	if (!owner || !address) return;
+	const [granted, credits] = await Promise.allSettled([
+		isGranted({ owner, address }),
+		creditsOf({ owner })
+	]);
+	app.backup.granted = granted.status === 'fulfilled' ? granted.value : null;
+	app.backup.credits = credits.status === 'fulfilled' ? credits.value : null;
+}
+
+/** @param {string} address the paying account's */
+export async function setBackupOwner(address) {
+	if (!session) return;
+	app.backup.error = null;
+	if (!isAddress(address)) {
+		app.backup.error = t('backup.ownerInvalid');
+		return;
+	}
+	await saveBackupOwner(session.store.settings, address);
+	await refreshBackup();
+}
+
+/**
+ * "Jetzt sichern": the file built in this browser, uploaded from it, and kept
+ * by a STORE this browser signs for the paying account.
+ */
+export async function backUpNow() {
+	if (!session || app.backup.step) return;
+	const { values, vault } = session.vault;
+	const owner = app.backup.owner;
+	if (!owner || !values.backupKey || !values.alephKey) return;
+	app.backup.error = null;
+	app.backup.made = null;
+	const { at, name } = backupMoment();
+	try {
+		app.backup.step = 'packing';
+		const built = await buildBackup({
+			databases: session.store.databases(),
+			vault: vault,
+			backupKey: values.backupKey,
+			appVersion: appRelease(),
+			now: () => at,
+			onProgress: (/** @type {any} */ p) => {
+				if (p.stage === 'database') {
+					app.backup.progress = { name: p.name, index: p.index, total: p.total };
+				} else app.backup.step = 'sealing';
+			}
+		});
+		app.backup.progress = null;
+		const kept = await keepBackup({
+			bytes: built.bytes,
+			name,
+			owner,
+			alephKey: values.alephKey,
+			onStep: (step) => (app.backup.step = step)
+		});
+		/** @type {import('./backup.js').BackupRecord} */
+		const record = {
+			at: at.toISOString(),
+			cid: kept.cid,
+			size: built.bytes.length,
+			status: kept.status,
+			itemHash: kept.itemHash,
+			owner,
+			sender: kept.sender,
+			entries: Object.fromEntries(
+				built.manifest.metadata.databases.map((/** @type {any} */ d) => [
+					d.collection,
+					d.entryCount
+				])
+			)
+		};
+		app.backup.history = await rememberBackup(session.store.settings, record);
+		app.backup.made = record;
+	} catch (error) {
+		console.error('the backup failed:', error);
+		app.backup.error =
+			error instanceof BackupRefusedError
+				? error.kind === 'credits'
+					? t('backup.refusedCredits', {
+							credits: Number(error.reason.credits).toLocaleString('de-DE'),
+							required: Number(error.reason.required).toLocaleString('de-DE')
+						})
+					: t('backup.refused', { code: String(error.reason.errorCode ?? '?') })
+				: t('backup.failed', { error: message(error) });
+	} finally {
+		app.backup.step = '';
+		app.backup.progress = null;
+	}
+	// What a backup costs shows on the account's credits.
+	if (app.backup.owner) {
+		app.backup.credits = await creditsOf({ owner: app.backup.owner }).catch(
+			() => app.backup.credits
+		);
+	}
+}
+
 export async function refresh() {
 	if (!session || !app.did) return;
 	const [invoices, customers, stored] = await Promise.all([
@@ -349,6 +492,17 @@ export async function lock() {
 	app.settings = null;
 	app.keys = [];
 	app.keysError = null;
+	app.backup = {
+		address: null,
+		owner: null,
+		granted: null,
+		credits: null,
+		history: [],
+		step: '',
+		progress: null,
+		error: null,
+		made: null
+	};
 	await closing?.stop();
 }
 

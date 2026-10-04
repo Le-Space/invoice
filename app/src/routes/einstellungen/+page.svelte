@@ -5,6 +5,7 @@
 	import { app, currentStore } from '$lib/session.svelte.js';
 	import { saveSettings } from '$lib/invoices.js';
 	import KeysSection from '$lib/KeysSection.svelte';
+	import BackupSection from '$lib/BackupSection.svelte';
 
 	/** A copy of the settings, written back on "Speichern". @type {any} */
 	let form = $state(null);
@@ -237,4 +238,5 @@
 
 <div class="mt-8">
 	<KeysSection />
+	<BackupSection />
 </div>

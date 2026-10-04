@@ -79,9 +79,14 @@ writes as the books; the passkey's DID is kept as each record's `author`.
 Books made before moved once to databases rooted at it; the old ones stay,
 read-only. Under Einstellungen → Schlüssel a second passkey — a YubiKey, say —
 gets a slot of its own, and a key can be removed (never the last, never the one
-in use); a removed key opens nothing in this browser any more. Nothing is readable on disk and no private key is kept
+in use); a removed key opens nothing in this browser any more. Under
+Einstellungen → Sicherung the books go to Aleph Cloud as one sealed file with
+the vault in front, straight from the browser: a key from the vault signs the
+STORE that keeps it, for a paying account that allowed that key once (belege's
+bridge account, `pnpm setup:aleph -- --authorize`), so any registered passkey
+can make a backup and open one. Nothing is readable on disk and no private key is kept
 (`app/src/lib/node.js`, `books-vault.js`, `books-move.js`,
-`session-identities.js`). The
+`session-identities.js`, `backup.js`). The
 session and store layer comes from Le-Space/belege, where its author wrote it,
 and is published here under MIT.
 

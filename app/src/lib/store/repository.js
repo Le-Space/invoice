@@ -130,7 +130,7 @@ export function createCollection(db, name, { author, now = () => new Date() }) {
  * @param {any} [params.accessController] the collections' `AccessController` (books-move.js);
  *   default: OrbitDB's
  * @param {Record<string, any>} [params.openOptions] extra `orbitdb.open` options (tests pass memory storages)
- * @returns {Promise<{ invoices: Collection, customers: Collection, settings: Collection, close: () => Promise<void> }>}
+ * @returns {Promise<{ invoices: Collection, customers: Collection, settings: Collection, databases: () => Record<CollectionName, any>, close: () => Promise<void> }>}
  */
 export async function openStore({
 	orbitdb,
@@ -169,6 +169,8 @@ export async function openStore({
 		invoices: collections.invoices,
 		customers: collections.customers,
 		settings: collections.settings,
+		/** The OrbitDB databases themselves, by collection: what a backup packs (backup.js). */
+		databases: () => /** @type {Record<CollectionName, any>} */ ({ ...dbs }),
 		async close() {
 			await Promise.allSettled(Object.values(dbs).map((db) => db.close()));
 		}

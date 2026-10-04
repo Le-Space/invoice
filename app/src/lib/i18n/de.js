@@ -56,7 +56,7 @@ export default {
 				heading: 'Datenschutz und Sicherheit',
 				points: [
 					'**Auf diesem Gerät:** Rechnungen, Kunden, Eigenbelege und Kopplungen sind verschlüsselt gespeichert (AES-GCM), mit einem Schlüssel, der bei jedem Entsperren aus deinem Passkey abgeleitet und nie gespeichert wird. Ohne den Passkey kann sie niemand lesen – auch wir nicht.',
-					'**Wann die App ins Netz geht:** nur nach „Verbindung aufbauen“, und danach nur, solange eine App gekoppelt ist. Deine Rechnungen werden dabei nie übertragen; die Datenbanken bleiben auf diesem Gerät.',
+					'**Wann die App ins Netz geht:** nur nach „Verbindung aufbauen“, und danach nur, solange eine App gekoppelt ist. Deine Rechnungen werden dabei nie übertragen; die Datenbanken bleiben auf diesem Gerät – außer du sicherst sie unter Einstellungen → Sicherung: Dann geht eine versiegelte Datei zu Aleph Cloud.',
 					'**Welches Relay:** Die App fragt api.aleph.im nach den aktuellen Adressen der Le-Space-Relays und nimmt nur Einträge der beiden Le-Space-Wallets an. Aleph sieht dabei die IP-Adresse dieses Geräts.',
 					'**Was das Relay sieht:** die IP-Adresse dieses Geräts und der gekoppelten App, beider Peer-IDs, wann sie verbunden sind und wie viele Bytes fließen. Nicht den Inhalt: Jede Verbindung ist Ende zu Ende verschlüsselt (Noise), und das Relay kann sich nicht als diese App ausgeben.',
 					'**Direkte Verbindung:** Damit das PDF direkt fließt, handeln die beiden Geräte WebRTC aus und fragen dafür öffentliche STUN-Server (Google, Twilio, Cloudflare, Mozilla) nach ihrer öffentlichen Adresse. Diese Server sehen die IP-Adresse, keine Inhalte.',
@@ -121,6 +121,47 @@ export default {
 		defaultLabel: 'Zweiter Schlüssel',
 		onlyOne: 'Nur ein Schlüssel öffnet diese Bücher. Geht er verloren, sind sie verloren.',
 		onlyOneAction: 'Zweiten Schlüssel hinzufügen'
+	},
+	backup: {
+		heading: 'Sicherung',
+		intro:
+			'Eine Sicherung enthält alle Rechnungen, Kunden und Einstellungen dieser Bücher, versiegelt mit einem Schlüssel aus dem Tresor. Jeder eingetragene Passkey öffnet sie, auch auf einem leeren Gerät. Aleph Cloud bewahrt sie auf; bezahlt wird das von einem Aleph-Konto, das den Sicherungsschlüssel dieser Bücher einmal freigibt.',
+		address: 'Sicherungsschlüssel dieser Bücher',
+		ownerLabel: 'Zahlendes Aleph-Konto',
+		ownerPlaceholder: '0x…',
+		ownerHint:
+			'Die Adresse des Kontos der belege-Bridge; `pnpm setup:aleph` zeigt sie. Sie ist öffentlich. Auf einem leeren Gerät brauchst du sie zum Wiederherstellen.',
+		ownerSave: 'Konto übernehmen',
+		ownerInvalid: 'Das ist keine Adresse: 0x und 40 Hexadezimalzeichen.',
+		granted: 'Freigegeben: Dieser Schlüssel darf auf Kosten des Kontos sichern.',
+		notGranted:
+			'Das Konto hat diesen Schlüssel noch nicht freigegeben. Einmal, im Ordner von belege:',
+		grantUnknown: 'Ob das Konto diesen Schlüssel freigegeben hat, war gerade nicht zu erfahren.',
+		check: 'Erneut prüfen',
+		credits: 'Guthaben des Kontos',
+		creditsValue: '{credits} Credits',
+		creditsUnknown: 'unbekannt',
+		now: 'Jetzt sichern',
+		step: {
+			packing: 'Packe {name} ({index} von {total}) …',
+			packingStart: 'Packe die Bücher …',
+			sealing: 'Versiegle …',
+			uploading: 'Lade zu Aleph hoch …',
+			keeping: 'Warte, bis Aleph die Sicherung annimmt …'
+		},
+		made: 'Gesichert: {size}, {entries} Einträge – {kept}.',
+		kept: 'von Aleph aufbewahrt',
+		pending: 'Aleph hat noch nicht entschieden',
+		refusedCredits:
+			'Aleph hat die Sicherung nicht behalten: Auf dem Konto sind {credits} Credits, für einen Tag braucht diese Sicherung {required}. Lade Credits auf (app.aleph.cloud → Credits) und sichere noch einmal.',
+		refused:
+			'Aleph hat die Sicherung nicht behalten (Fehler {code}). Ist der Sicherungsschlüssel für dieses Konto freigegeben?',
+		failed: 'Die Sicherung ist fehlgeschlagen: {error}',
+		history: 'Bisherige Sicherungen',
+		none: 'Noch keine Sicherung.',
+		cid: 'Kennung',
+		leaves:
+			'Was hinausgeht: die versiegelte Datei an Alephs IPFS-Host (Aleph sieht ihre Größe und die IP-Adresse dieses Geräts, nicht den Inhalt), die STORE-Nachricht mit der Adresse dieses Schlüssels, der des Kontos und der Kennung der Datei an die Aleph-API. Zum Anzeigen fragt die Seite dort Freigabe und Guthaben des Kontos ab.'
 	},
 	invoice: {
 		app: {
