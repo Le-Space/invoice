@@ -1,9 +1,11 @@
 <script>
 	// The books' backup on Aleph (backup.js): this key's address, the paying
 	// account and whether it lets this key keep backups, "Jetzt sichern", and
-	// the backups made so far.
+	// the backups made so far, each with the passkeys that open it. A passkey
+	// opens only the backups made while it had a slot, so a key added since the
+	// last backup is named until the next one.
 	import { onMount } from 'svelte';
-	import { BACKUP_CHANNEL } from './backup.js';
+	import { BACKUP_CHANNEL, backupCoverage } from './backup.js';
 	import { t } from './i18n/index.js';
 	import { app, backUpNow, refreshBackup, setBackupOwner } from './session.svelte.js';
 
@@ -15,6 +17,8 @@
 			? `pnpm setup:aleph -- --authorize ${app.backup.address} --channel ${BACKUP_CHANNEL}`
 			: ''
 	);
+	/** The registered passkeys the newest backup does not open. */
+	let uncovered = $derived(backupCoverage(app.backup.history[0], app.keys)?.misses ?? []);
 
 	const input = 'w-full rounded-md border border-border bg-surface px-2 py-1.5 font-mono text-sm';
 	const primary =
@@ -55,6 +59,20 @@
 		);
 	/** @param {string} status */
 	const kept = (status) => (status === 'processed' ? t('backup.kept') : t('backup.pending'));
+	/** @param {{ label: string | null }[]} keys */
+	const names = (keys) => keys.map((key) => `„${key.label ?? t('keys.unnamed')}“`).join(', ');
+	/** @param {import('./backup.js').BackupRecord} record */
+	function opensWith(record) {
+		const coverage = backupCoverage(record, app.keys);
+		if (!coverage) return '';
+		const opens = coverage.opens.length
+			? t('backup.opens', { keys: names(coverage.opens) })
+			: t('backup.opensNone');
+		if (coverage.gone === 0) return opens;
+		const gone =
+			coverage.gone === 1 ? t('backup.goneOne') : t('backup.goneMany', { count: coverage.gone });
+		return `${opens}; ${gone}`;
+	}
 </script>
 
 <section
@@ -121,6 +139,17 @@
 							})}</span
 				>
 			</p>
+			{#if uncovered.length > 0 && !busy}
+				<p
+					class="rounded-md border border-border bg-surface-2 p-3 text-heading"
+					role="status"
+					data-testid="backup-uncovered"
+				>
+					{uncovered.length === 1
+						? t('backup.uncoveredOne', { key: names(uncovered) })
+						: t('backup.uncoveredMany', { keys: names(uncovered) })}
+				</p>
+			{/if}
 			<div class="flex flex-wrap items-center gap-3">
 				<button
 					type="button"
@@ -181,10 +210,14 @@
 		{:else}
 			<ul class="divide-y divide-border rounded-md border border-border">
 				{#each app.backup.history as record (record.itemHash)}
+					{@const opens = opensWith(record)}
 					<li class="space-y-0.5 px-3 py-2 text-sm" data-testid="backup-row">
 						<p class="text-heading">
 							{when(record.at)} · {size(record.size)} · {kept(record.status)}
 						</p>
+						{#if opens}
+							<p class="text-xs text-text" data-testid="backup-opens">{opens}</p>
+						{/if}
 						<p class="font-mono text-xs break-all text-faint">
 							{t('backup.cid')}: {record.cid}
 						</p>

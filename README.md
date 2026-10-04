@@ -83,12 +83,16 @@ in use); a removed key opens nothing in this browser any more. Under
 Einstellungen → Sicherung the books go to Aleph Cloud as one sealed file with
 the vault in front, straight from the browser: a key from the vault signs the
 STORE that keeps it, for a paying account that allowed that key once (belege's
-bridge account, `pnpm setup:aleph -- --authorize`), so any registered passkey
-can make a backup and open one. On an empty device, "Bücher aus einer Sicherung
-holen" needs only that account's address and one registered passkey: the
-newest backup with a slot for it comes back, merged into the books; and the
-app asks before a passkey without books here starts empty ones. Nothing is
-readable on disk and no private key is kept
+bridge account, `pnpm setup:aleph -- --authorize`). Any registered passkey can
+make a backup; a backup opens with the passkeys registered when it was made, so
+a key added since needs a new backup, and the page names it until then. On an
+empty device, "Bücher aus einer Sicherung holen" needs that account's address,
+which is public but the only way to the backups, and a passkey registered when
+the backup was made: the newest backup with a slot for it comes back, merged
+into the books; and the app asks before a passkey without books here starts
+empty ones. A removed key still opens the backups made before it was removed
+([docs/backup.md](docs/backup.md)). Nothing is readable on disk and no private
+key is kept
 (`app/src/lib/node.js`, `books-vault.js`, `books-move.js`,
 `session-identities.js`, `backup.js`). The
 session and store layer comes from Le-Space/belege, where its author wrote it,

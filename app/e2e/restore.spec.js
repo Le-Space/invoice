@@ -1,8 +1,10 @@
 // "Bücher aus einer Sicherung holen" (Le-Space/invoice#28): the acceptance of
-// the two-keys plan's phase 3, in a browser. Books made with key A, key B
-// added, a backup kept on (a fake) Aleph; then the browser forgets everything,
-// and key B alone — with nothing but the paying account's address — brings the
-// books back: what A wrote, the same books identity, and B writes on.
+// the two-keys plan's phase 3, in a browser. Books made with key A and a backup
+// kept on (a fake) Aleph; key B added, which that backup does not know, so the
+// page says so until a second backup; then the browser forgets everything, and
+// key B alone — with nothing but the paying account's address — brings the
+// books back from the backup it opens: what A wrote, the same books identity,
+// and B writes on.
 //
 // Two virtual authenticators on one page, as in keys.spec.js: the device's own
 // passkey (A) and a security key on USB (B), each with its own PRF secret; only
@@ -93,17 +95,9 @@ test('key B alone brings the books back from a backup on an empty device, and wr
 	const first = await issue(page, 'Erster Kunde AG');
 	const booksDid = await page.evaluate(() => /** @type {any} */ (window).__invoiceE2E.booksDid());
 
-	// Key B added; from now on only B answers.
-	const { authenticatorId: keyB } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
-		options: { ...KEY, transport: 'usb' }
-	});
-	await presence(keyA, false);
+	// A backup while A is the only key, kept for the paying account (grant and
+	// credits done in the fake).
 	await page.getByRole('link', { name: 'Einstellungen' }).click();
-	await page.getByTestId('key-label').fill('YubiKey Schublade');
-	await page.getByTestId('key-add').click();
-	await expect(page.getByTestId('key-row')).toHaveCount(2);
-
-	// A backup, kept for the paying account (grant and credits done in the fake).
 	const section = page.getByTestId('backup');
 	await expect(section.getByTestId('backup-address')).toHaveText(/0x[0-9a-fA-F]{40}/);
 	const address = /** @type {string} */ (
@@ -118,6 +112,30 @@ test('key B alone brings the books back from a backup on an empty device, and wr
 	await expect(section.getByTestId('backup-made')).toContainText('von Aleph aufbewahrt', {
 		timeout: 60_000
 	});
+	await expect(section.getByTestId('backup-opens')).toHaveText('Öffnet mit „Laptop“');
+	await expect(section.getByTestId('backup-uncovered')).toHaveCount(0);
+
+	// Key B added; from now on only B answers. The backup there is does not
+	// know B, and the page says so.
+	const { authenticatorId: keyB } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+		options: { ...KEY, transport: 'usb' }
+	});
+	await presence(keyA, false);
+	await page.getByTestId('key-label').fill('YubiKey Schublade');
+	await page.getByTestId('key-add').click();
+	await expect(page.getByTestId('key-row')).toHaveCount(2);
+	await expect(section.getByTestId('backup-uncovered')).toContainText(
+		'kennt den Schlüssel „YubiKey Schublade“ noch nicht'
+	);
+
+	// A second backup: every key opens it.
+	await section.getByTestId('backup-now').click();
+	await expect(section.getByTestId('backup-row')).toHaveCount(2, { timeout: 60_000 });
+	await expect(section.getByTestId('backup-uncovered')).toHaveCount(0);
+	await expect(section.getByTestId('backup-opens')).toHaveText([
+		'Öffnet mit „Laptop“, „YubiKey Schublade“',
+		'Öffnet mit „Laptop“'
+	]);
 
 	// The device forgets everything: no passkey, no vault, no books. Key A is
 	// gone with the old device; key B is the one at hand.
@@ -154,12 +172,86 @@ test('key B alone brings the books back from a backup on an empty device, and wr
 	expect(await page.evaluate(() => /** @type {any} */ (window).__invoiceE2E.booksDid())).toBe(
 		booksDid
 	);
+	// It came back from the second backup, the newest that B opens: both
+	// backups are in the list, and no key is left out of the newest.
 	await page.getByRole('link', { name: 'Einstellungen' }).click();
 	await expect(page.getByTestId('key-row')).toHaveCount(2);
-	await expect(page.getByTestId('backup').getByTestId('backup-row')).toHaveCount(1);
+	await expect(section.getByTestId('backup-row')).toHaveCount(2);
+	await expect(section.getByTestId('backup-uncovered')).toHaveCount(0);
 
 	// B writes on, in a number circle of its own.
 	const second = await issue(page, 'Zweiter Kunde GmbH');
 	expect(second.split('-')[1]).not.toBe(first.split('-')[1]);
 	expect(await invoiceNumbers(page)).toEqual([first, second].sort());
+});
+
+test('a passkey added after the last backup brings nothing back, and nothing is kept', async ({
+	page
+}) => {
+	test.setTimeout(300_000);
+	const owner = toChecksumAddress(`0x${'7b'.repeat(20)}`);
+	await page.addInitScript((url) => localStorage.setItem('invoice.e2e.alephUrl', url), aleph.url);
+	const cdp = await page.context().newCDPSession(page);
+	await cdp.send('WebAuthn.enable');
+	const { authenticatorId: keyA } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+		options: KEY
+	});
+	/** @param {string} authenticatorId @param {boolean} enabled */
+	const presence = (authenticatorId, enabled) =>
+		cdp.send('WebAuthn.setAutomaticPresenceSimulation', { authenticatorId, enabled });
+
+	// Books made with key A, and a backup while A is the only key.
+	await page.goto('/');
+	await page.getByTestId('passkey-label').fill('Laptop');
+	await page.getByRole('button', { name: 'Passkey anlegen' }).click();
+	await expect(page.getByTestId('own-did')).toBeVisible();
+	await page.getByRole('link', { name: 'Einstellungen' }).click();
+	const section = page.getByTestId('backup');
+	await expect(section.getByTestId('backup-address')).toHaveText(/0x[0-9a-fA-F]{40}/);
+	const address = /** @type {string} */ (
+		await section.getByTestId('backup-address').textContent()
+	).trim();
+	aleph.grant(owner, { address, types: ['STORE'], channels: ['INVOICE-BACKUP'], chain: 'ETH' });
+	aleph.fund(owner, 1_000_000);
+	await section.getByTestId('backup-owner').fill(owner);
+	await section.getByTestId('backup-owner-save').click();
+	await expect(section.getByTestId('backup-granted')).toBeVisible();
+	await section.getByTestId('backup-now').click();
+	await expect(section.getByTestId('backup-made')).toContainText('von Aleph aufbewahrt', {
+		timeout: 60_000
+	});
+
+	// Key B added, and no backup since.
+	const { authenticatorId: keyB } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+		options: { ...KEY, transport: 'usb' }
+	});
+	await presence(keyA, false);
+	await page.getByTestId('key-label').fill('YubiKey Schublade');
+	await page.getByTestId('key-add').click();
+	await expect(page.getByTestId('key-row')).toHaveCount(2);
+	await expect(section.getByTestId('backup-uncovered')).toBeVisible();
+
+	// The device forgets everything; B alone opens none of the account's backups.
+	await forgetThisDevice(page);
+	await page.goto('/');
+	await page.getByTestId('restore-owner').fill(owner);
+	await page.getByTestId('restore-start').click();
+	await expect(page.getByTestId('passkey-error')).toContainText(
+		'Eine Sicherung öffnen nur die Passkeys, die beim Sichern eingetragen waren'
+	);
+	// B is not kept: "Entsperren" would start empty books with it.
+	await expect(page.getByTestId('passkey-unlock')).toHaveCount(0);
+	await page.reload();
+	await expect(page.getByTestId('passkey-onboarding')).toBeVisible();
+	await expect(page.getByTestId('passkey-unlock')).toHaveCount(0);
+
+	// A, which the backup knows, brings the books back, without B: B's slot was
+	// never in a backup.
+	await presence(keyB, false);
+	await presence(keyA, true);
+	await page.getByTestId('restore-owner').fill(owner);
+	await page.getByTestId('restore-start').click();
+	await expect(page.getByTestId('own-did')).toBeVisible({ timeout: 90_000 });
+	await page.getByRole('link', { name: 'Einstellungen' }).click();
+	await expect(page.getByTestId('key-row')).toHaveCount(1);
 });

@@ -65,8 +65,9 @@ export const app = $state({
 	invoices: [],
 	/**
 	 * The passkeys that open these books: one per slot in the vault, labelled
-	 * from what this browser keeps. `current` unlocked this session.
-	 * @type {{ credentialId: string | null, label: string | null, current: boolean }[]}
+	 * from what this browser keeps. `current` unlocked this session; `kid` is
+	 * the slot's id, as a backup's vault names it.
+	 * @type {{ kid: string, credentialId: string | null, label: string | null, current: boolean }[]}
 	 */
 	keys: [],
 	/** @type {'idle' | 'adding' | 'removing'} */
@@ -226,6 +227,7 @@ async function refreshKeys() {
 	app.keys = booksSlotIds(session.vault).map((kid) => {
 		const passkey = byKid[kid];
 		return {
+			kid,
 			credentialId: passkey?.credentialId ?? null,
 			label: passkey?.label ?? null,
 			current: passkey?.credentialId === session?.credentialId
@@ -334,7 +336,8 @@ export async function setBackupOwner(address) {
  */
 export async function backUpNow() {
 	if (!session || app.backup.step) return;
-	const { values, vault } = session.vault;
+	const opened = session.vault;
+	const { values, vault } = opened;
 	const owner = app.backup.owner;
 	if (!owner || !values.backupKey || !values.alephKey) return;
 	app.backup.error = null;
@@ -376,7 +379,9 @@ export async function backUpNow() {
 					d.collection,
 					d.entryCount
 				])
-			)
+			),
+			// The passkeys that open this one: the slots of the vault in front.
+			slots: booksSlotIds(opened)
 		};
 		app.backup.history = await rememberBackup(session.store.settings, record);
 		app.backup.made = record;
@@ -515,6 +520,8 @@ export async function restoreFromBackup(ownerAddress) {
 	/** @type {string | null} */
 	let installed = null;
 	let unlocked = false;
+	/** @type {any} the passkey restored from its authenticator for this */
+	let credential = null;
 	try {
 		if (!isAddress(ownerAddress)) throw new Error(t('restore.ownerInvalid'));
 		const { toChecksumAddress } = await import('./aleph-signer.js');
@@ -524,7 +531,7 @@ export async function restoreFromBackup(ownerAddress) {
 
 		app.restore.step = 'passkey';
 		keepDefaultAside();
-		const credential = await restorePasskeyCredential();
+		credential = await restorePasskeyCredential();
 		if (!credential) throw new Error(t('onboarding.restoreFailed'));
 
 		app.restore.step = 'fetching';
@@ -565,7 +572,8 @@ export async function restoreFromBackup(ownerAddress) {
 						d.collection,
 						d.entryCount
 					])
-				)
+				),
+				slots: booksSlotIds({ vault: picked.vault })
 			});
 		}
 		await refresh();
@@ -577,6 +585,12 @@ export async function restoreFromBackup(ownerAddress) {
 		// Opened, but not put back: shut again. The vault stays, so trying again
 		// opens the same books and merges once more.
 		if (unlocked) await lock();
+		// Not opened: a passkey with no books here is not kept, or "Entsperren"
+		// would start empty ones without asking (as restorePasskey declined).
+		else if (credential) {
+			const here = await booksHereFor(credential.rawCredentialId);
+			if (!here.slot && !here.removed) forgetPasskey(credential.credentialId);
+		}
 		app.status = 'error';
 		app.error = error instanceof Error ? error.message : String(error);
 	} finally {

@@ -4,8 +4,9 @@
 // @le-space/orbitdb-storage-bridge/app-backup):
 //   - in front, read without a key, the books' vault as this browser keeps it
 //     (books-vault.js): one sealed slot per registered passkey, the values
-//     sealed under the vault key. Any registered passkey finds the keys to the
-//     rest there, on any device;
+//     sealed under the vault key. A passkey that was registered when the
+//     backup was made finds the keys to the rest there, on any device; one
+//     added later opens only the backups made after it;
 //   - behind it, the three collections block by block (`bundleDatabases`),
 //     sealed with the vault's `backupKey` (AES-GCM).
 //
@@ -89,6 +90,8 @@ export const isAddress = (value) =>
  * @property {string} owner the paying account
  * @property {string} sender this key's address
  * @property {Record<string, number>} entries log entries per collection
+ * @property {string[]} [slots] the slot ids of the vault in front: the passkeys that open
+ *   it (`slotIdFor`). Not known for backups made before it was kept.
  */
 
 /** @param {any} settings @returns {Promise<BackupRecord[]>} */
@@ -102,6 +105,28 @@ export async function rememberBackup(settings, record) {
 	const list = [record, ...(await loadBackups(settings))].slice(0, KEEP);
 	await setSetting(settings, BACKUPS_SETTING, list);
 	return list;
+}
+
+/**
+ * Which of the books' passkeys a backup opens: those that had a slot in the
+ * vault when it was made. A passkey added since does not open it, and one
+ * removed since still does.
+ *
+ * @template {{ kid: string }} K
+ * @param {BackupRecord | undefined} record
+ * @param {K[]} keys the passkeys the vault has a slot for now
+ * @returns {{ opens: K[], misses: K[], gone: number } | null} `gone`: passkeys
+ *   removed since that still open it; null when the record does not say
+ */
+export function backupCoverage(record, keys) {
+	if (!Array.isArray(record?.slots)) return null;
+	const slots = new Set(record.slots);
+	const now = new Set(keys.map((key) => key.kid));
+	return {
+		opens: keys.filter((key) => slots.has(key.kid)),
+		misses: keys.filter((key) => !slots.has(key.kid)),
+		gone: record.slots.filter((kid) => !now.has(kid)).length
+	};
 }
 
 /** @param {any} settings @returns {Promise<string | null>} */

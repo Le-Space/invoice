@@ -31,6 +31,7 @@ import {
 	BACKUP_CHANNEL,
 	BackupRefusedError,
 	backupCipher,
+	backupCoverage,
 	backupMoment,
 	buildBackup,
 	creditsOf,
@@ -483,5 +484,43 @@ describe('finding the backup on an empty device', () => {
 			fetchBytes
 		});
 		expect(none.picked).toBeNull();
+	});
+});
+
+describe('which passkeys open a backup', () => {
+	const [a, b, c] = ['a', 'b', 'c'].map((x) => ({ kid: x.repeat(64), label: x.toUpperCase() }));
+	/** @param {string[]} [slots] @returns {import('./backup.js').BackupRecord} */
+	const record = (slots) => ({
+		at: '2026-10-04T08:00:00.000Z',
+		cid: 'QmMadeUp',
+		size: 1,
+		status: 'processed',
+		itemHash: 'h',
+		owner: toChecksumAddress(`0x${'ab'.repeat(20)}`),
+		sender: toChecksumAddress(`0x${'cd'.repeat(20)}`),
+		entries: {},
+		...(slots ? { slots } : {})
+	});
+
+	it('those that had a slot when it was made: not one added since, still one removed since', () => {
+		// Made with A alone; B added since.
+		expect(backupCoverage(record([a.kid]), [a, b])).toEqual({ opens: [a], misses: [b], gone: 0 });
+		// Made with A and C; C removed since, B added.
+		expect(backupCoverage(record([a.kid, c.kid]), [a, b])).toEqual({
+			opens: [a],
+			misses: [b],
+			gone: 1
+		});
+		// Made with every key there is now.
+		expect(backupCoverage(record([b.kid, a.kid]), [a, b])).toEqual({
+			opens: [a, b],
+			misses: [],
+			gone: 0
+		});
+	});
+
+	it('says nothing for a backup made before the slots were kept, or none at all', () => {
+		expect(backupCoverage(record(), [a, b])).toBeNull();
+		expect(backupCoverage(undefined, [a, b])).toBeNull();
 	});
 });
