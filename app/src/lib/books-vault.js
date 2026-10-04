@@ -23,6 +23,11 @@
 // collections have moved to databases rooted at that identity
 // (books-move.js), where they were (`moved`). A version-1 vault is read as it
 // is and upgraded on the next unlock.
+//
+// Version 3 adds what a backup needs (Le-Space/invoice#28), again the same
+// for every slot: the key a backup file is sealed with (`backupKey`), and the
+// key its STORE message on Aleph is signed with (`alephKey`, aleph-key.js).
+// So any registered passkey can make a backup, and open one.
 
 import {
 	createVault,
@@ -33,6 +38,7 @@ import {
 	deriveAesKey,
 	slotIdFor
 } from '@le-space/orbitdb-identity-provider-webauthn-did';
+import { isAlephKey, newAlephKey } from './aleph-key.js';
 import { deriveDatabaseKey, deriveDatabaseName, derivePeerKeySeed } from './database-keys.js';
 
 /** Bumping this gives every passkey a new slot key: no slot would open any more. */
@@ -65,6 +71,8 @@ const COLLECTIONS = /** @type {const} */ (['invoices', 'customers', 'settings'])
  * @property {Uint8Array} peerSeed 32 bytes, the UCEP node's key seed
  * @property {Uint8Array} [booksSecret] 32 bytes, the books' identity (version 2)
  * @property {BooksMove} [moved] where the collections were before they moved (version 2)
+ * @property {Uint8Array} [backupKey] 32 bytes, the AES-GCM key a backup file is sealed with (version 3)
+ * @property {Uint8Array} [alephKey] 32 bytes, the secp256k1 key a backup's STORE is signed with (version 3)
  */
 
 /** A passkey that was removed from the books in this browser: it opens nothing here. */
@@ -99,14 +107,24 @@ function fromHex(value, bytes) {
 
 /** @param {BooksValues} values @returns {Uint8Array} */
 function encodeValues(values) {
+	const backup = Boolean(values.backupKey && values.alephKey);
+	if (backup && !values.booksSecret) {
+		throw new VaultStorageError('Backup keys come after the books’ own identity, not before it.');
+	}
 	return new TextEncoder().encode(
 		JSON.stringify({
-			version: values.booksSecret ? 2 : 1,
+			version: backup ? 3 : values.booksSecret ? 2 : 1,
 			dbKey: toHex(values.dbKey),
 			names: values.names,
 			peerSeed: toHex(values.peerSeed),
 			...(values.booksSecret ? { booksSecret: toHex(values.booksSecret) } : {}),
-			...(values.moved ? { moved: values.moved } : {})
+			...(values.moved ? { moved: values.moved } : {}),
+			...(backup
+				? {
+						backupKey: toHex(/** @type {Uint8Array} */ (values.backupKey)),
+						alephKey: toHex(/** @type {Uint8Array} */ (values.alephKey))
+					}
+				: {})
 		})
 	);
 }
@@ -122,7 +140,7 @@ function decodeValues(payload) {
 			cause: error
 		});
 	}
-	if (parsed?.version !== 1 && parsed?.version !== 2) {
+	if (![1, 2, 3].includes(parsed?.version)) {
 		throw new VaultStorageError(`A vault of version ${parsed?.version} is not readable here.`);
 	}
 	/** @type {Record<string, string>} */
@@ -140,9 +158,16 @@ function decodeValues(payload) {
 		names: /** @type {BooksValues['names']} */ (names),
 		peerSeed: fromHex(parsed.peerSeed, 32)
 	};
-	if (parsed.version === 2) {
+	if (parsed.version >= 2) {
 		values.booksSecret = fromHex(parsed.booksSecret, 32);
 		if (parsed.moved !== undefined) values.moved = readMove(parsed.moved);
+	}
+	if (parsed.version >= 3) {
+		values.backupKey = fromHex(parsed.backupKey, 32);
+		values.alephKey = fromHex(parsed.alephKey, 32);
+		if (!isAlephKey(values.alephKey)) {
+			throw new VaultStorageError('The vault holds an Aleph key that is no key.');
+		}
 	}
 	return values;
 }
@@ -251,6 +276,29 @@ export async function ensureBooksSecret(opened, storage = localStorage) {
 	return updateBooksVault(
 		opened,
 		{ ...opened.values, booksSecret: crypto.getRandomValues(new Uint8Array(32)) },
+		storage
+	);
+}
+
+/**
+ * Give the books what a backup needs: a key to seal the file with and a key
+ * to sign its STORE message with, both random, kept in the vault and so the
+ * same for every slot. Books that have them keep them; it comes after the
+ * books' own identity (`ensureBooksSecret`).
+ *
+ * @param {{ values: BooksValues, vault: any, vaultKey: Uint8Array }} opened
+ * @param {Storage} [storage]
+ * @returns {Promise<{ values: BooksValues, vault: any, vaultKey: Uint8Array }>}
+ */
+export async function ensureBackupKeys(opened, storage = localStorage) {
+	if (opened.values.backupKey && opened.values.alephKey) return opened;
+	return updateBooksVault(
+		opened,
+		{
+			...opened.values,
+			backupKey: crypto.getRandomValues(new Uint8Array(32)),
+			alephKey: newAlephKey()
+		},
 		storage
 	);
 }
