@@ -76,6 +76,19 @@
 				>
 			{/each}
 		</nav>
+		{#if app.restore.done}
+			<p
+				class="mb-4 rounded-md border border-border bg-surface px-3 py-2 text-sm text-heading"
+				role="status"
+				data-testid="restore-done"
+			>
+				{t('restore.done', {
+					at: new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(
+						new Date(app.restore.done.at)
+					)
+				})}
+			</p>
+		{/if}
 		{#if app.keys.length === 1 && !page.url.pathname.startsWith('/einstellungen')}
 			<p
 				class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-data/40 bg-data/10 px-3 py-2 text-sm text-heading"

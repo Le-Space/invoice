@@ -84,7 +84,11 @@ Einstellungen → Sicherung the books go to Aleph Cloud as one sealed file with
 the vault in front, straight from the browser: a key from the vault signs the
 STORE that keeps it, for a paying account that allowed that key once (belege's
 bridge account, `pnpm setup:aleph -- --authorize`), so any registered passkey
-can make a backup and open one. Nothing is readable on disk and no private key is kept
+can make a backup and open one. On an empty device, "Bücher aus einer Sicherung
+holen" needs only that account's address and one registered passkey: the
+newest backup with a slot for it comes back, merged into the books; and the
+app asks before a passkey without books here starts empty ones. Nothing is
+readable on disk and no private key is kept
 (`app/src/lib/node.js`, `books-vault.js`, `books-move.js`,
 `session-identities.js`, `backup.js`). The
 session and store layer comes from Le-Space/belege, where its author wrote it,

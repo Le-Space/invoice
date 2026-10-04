@@ -97,7 +97,31 @@ export default {
 		createFailed: 'Der Passkey konnte nicht angelegt werden.',
 		restoreFailed: 'Auf diesem Gerät wurde kein Passkey für die Rechnungs-App gefunden.',
 		unlockFailed: 'In diesem Browser ist kein Passkey gespeichert.',
-		choose: 'Schlüssel'
+		choose: 'Schlüssel',
+		noBooksHere:
+			'Für diesen Passkey gibt es in diesem Browser noch keine Bücher. Neue, leere Bücher anlegen?\n\nHast du eine Sicherung, brich ab und wähle „Bücher aus einer Sicherung holen“.',
+		noNewBooks:
+			'Es wurden keine neuen Bücher angelegt. Hol deine Bücher mit „Bücher aus einer Sicherung holen“ zurück, oder versuche es noch einmal.'
+	},
+	restore: {
+		heading: 'Bücher aus einer Sicherung holen',
+		hint: 'Auf einem leeren Gerät: Gib die Adresse des Aleph-Kontos ein, das deine Sicherungen bezahlt, und bestätige mit einem eingetragenen Passkey. Die neueste Sicherung, die dieser Passkey öffnet, kommt zurück; vorhandene Einträge bleiben.',
+		ownerLabel: 'Zahlendes Aleph-Konto',
+		ownerPlaceholder: '0x…',
+		start: 'Sicherung suchen und öffnen',
+		ownerInvalid: 'Das ist keine Adresse: 0x und 40 Hexadezimalzeichen.',
+		none: 'Für dieses Konto liegt bei Aleph keine Sicherung der Rechnungs-App.',
+		noSlot: 'Keine der Sicherungen dieses Kontos lässt sich mit diesem Passkey öffnen.',
+		unreachable:
+			'Die Sicherungen dieses Kontos waren gerade nicht abzurufen. Bitte später noch einmal versuchen.',
+		step: {
+			searching: 'Suche Sicherungen …',
+			passkey: '{found} gefunden. Bitte den Passkey bestätigen …',
+			fetching: 'Hole die Sicherung …',
+			unlocking: 'Öffne die Bücher …',
+			restoring: 'Spiele die Sicherung ein …'
+		},
+		done: 'Aus der Sicherung vom {at} wiederhergestellt.'
 	},
 	keys: {
 		heading: 'Schlüssel',
