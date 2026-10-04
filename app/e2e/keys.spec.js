@@ -123,6 +123,10 @@ test('a second key opens and writes the books, and the first can go', async ({ p
 	expect(viaB.databaseKey).toBe(books.databaseKey);
 	expect(viaB.ucepSeed).toBe(books.ucepSeed);
 	expect(viaB.booksSecret).toBe(books.booksSecret);
+	// And the keys a backup needs: B can make one, and open A's (Le-Space/invoice#28).
+	expect(viaB.backupKey).toBe(books.backupKey);
+	expect(viaB.alephKey).toBe(books.alephKey);
+	expect(books.backupKey).not.toBe(books.databaseKey);
 
 	// B writes, in a number circle of its own.
 	const second = await issue(page, 'Zweiter Kunde GmbH');

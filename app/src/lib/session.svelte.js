@@ -374,7 +374,9 @@ function installE2EHooks() {
 						databaseKey: hex(s.databaseKey),
 						peerKey: hex(s.peerKey),
 						ucepSeed: hex(s.ucepSeed),
-						booksSecret: hex(s.booksSecret)
+						booksSecret: hex(s.booksSecret),
+						backupKey: hex(s.backupKey),
+						alephKey: hex(s.alephKey)
 					}
 				: null;
 		}

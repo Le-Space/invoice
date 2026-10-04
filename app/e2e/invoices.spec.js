@@ -97,13 +97,20 @@ test('a USDC invoice from a template, issued, printed and sealed', async ({ page
 	const { text } = await everythingStoredAsText(page);
 	expect(text).not.toContain(customer);
 	expect(text).not.toContain('Serverbetrieb');
-	for (const key of [secrets.databaseKey, secrets.ucepSeed, secrets.booksSecret]) {
+	for (const key of [
+		secrets.databaseKey,
+		secrets.ucepSeed,
+		secrets.booksSecret,
+		secrets.backupKey,
+		secrets.alephKey
+	]) {
 		for (const form of spellings(key)) expect(text).not.toContain(form);
 	}
 
-	// The key, the names, the UCEP seed and the books' own identity are in the
-	// books' vault: one record, one slot, the passkey's — sealed, which the scan
-	// above shows. The books sign as themselves, not as the passkey.
+	// The key, the names, the UCEP seed, the books' own identity and the two
+	// backup keys are in the books' vault: one record, one slot, the passkey's —
+	// sealed, which the scan above shows. The books sign as themselves, not as
+	// the passkey.
 	const vaults = await page.evaluate(() =>
 		JSON.parse(localStorage.getItem('invoice.vaults.v1') ?? 'null')
 	);

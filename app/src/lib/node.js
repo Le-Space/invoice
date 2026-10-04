@@ -29,7 +29,12 @@ import {
 import * as dagCbor from '@ipld/dag-cbor';
 
 import { createEphemeralPeerKey, createOfflineLibp2p } from './network.js';
-import { ensureBooksSecret, openBooksVault, updateBooksVault } from './books-vault.js';
+import {
+	ensureBackupKeys,
+	ensureBooksSecret,
+	openBooksVault,
+	updateBooksVault
+} from './books-vault.js';
 import { MOVE_RECORD_KEY, booksAccessController, moveBooks } from './books-move.js';
 import { readPrfOutput } from './passkey-identity.js';
 import { BOOKS_IDENTITY_INFO, createBooksIdentities } from './session-identities.js';
@@ -58,7 +63,7 @@ export const STORAGE_PATHS = Object.freeze({
  * @property {string} peerId this session's libp2p peer id
  * @property {Uint8Array} ucepSeed the seed of the UCEP node's peer key, from the books' vault
  * @property {() => Promise<void>} stop
- * @property {{ databaseKey: Uint8Array, peerKey: Uint8Array, ucepSeed: Uint8Array, booksSecret: Uint8Array }} [secretsForE2E]
+ * @property {{ databaseKey: Uint8Array, peerKey: Uint8Array, ucepSeed: Uint8Array, booksSecret: Uint8Array, backupKey: Uint8Array, alephKey: Uint8Array }} [secretsForE2E]
  *   only in E2E builds
  */
 
@@ -85,9 +90,12 @@ export async function startSession(credential) {
 	// The key, the names and the UCEP seed come from the books' vault, which any
 	// passkey with a slot opens. The first unlock fills it with what this passkey
 	// derives, so books made before the vault are found where they are.
-	// Books from before version 2 get their own identity's secret here.
-	let opened = await ensureBooksSecret(
-		await openBooksVault({ prfOutput, rawCredentialId: credential.rawCredentialId })
+	// Books from before version 2 get their own identity's secret here, and
+	// books from before version 3 the keys a backup needs (Le-Space/invoice#28).
+	let opened = await ensureBackupKeys(
+		await ensureBooksSecret(
+			await openBooksVault({ prfOutput, rawCredentialId: credential.rawCredentialId })
+		)
 	);
 	const { values } = opened;
 	const encryptionKey = values.dbKey;
@@ -182,7 +190,9 @@ export async function startSession(credential) {
 							databaseKey: encryptionKey,
 							peerKey: peerKey.raw,
 							ucepSeed,
-							booksSecret: /** @type {Uint8Array} */ (values.booksSecret)
+							booksSecret: /** @type {Uint8Array} */ (values.booksSecret),
+							backupKey: /** @type {Uint8Array} */ (values.backupKey),
+							alephKey: /** @type {Uint8Array} */ (values.alephKey)
 						}
 					}
 				: {}),

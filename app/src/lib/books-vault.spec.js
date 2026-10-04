@@ -11,11 +11,13 @@ import {
 	addBooksSlot,
 	booksSlotIds,
 	deriveBooksValues,
+	ensureBackupKeys,
 	ensureBooksSecret,
 	openBooksVault,
 	removeBooksSlot,
 	updateBooksVault
 } from './books-vault.js';
+import { isAlephKey } from './aleph-key.js';
 import { deriveDatabaseKey, deriveDatabaseName, derivePeerKeySeed } from './database-keys.js';
 
 /** localStorage, in memory. */
@@ -178,6 +180,58 @@ describe('books vault', () => {
 			hex(/** @type {Uint8Array} */ (first.values.booksSecret))
 		);
 		expect(hex(viaB.values.dbKey)).toBe(hex(first.values.dbKey));
+	});
+
+	it('gives books the keys a backup needs once: the same for every slot, kept, and sealed', async () => {
+		const storage = memoryStorage();
+		const a = passkey();
+		const b = passkey();
+		const first = await ensureBackupKeys(
+			await ensureBooksSecret(await openBooksVault({ ...a, storage }), storage),
+			storage
+		);
+		const backupKey = /** @type {Uint8Array} */ (first.values.backupKey);
+		const alephKey = /** @type {Uint8Array} */ (first.values.alephKey);
+		expect(backupKey).toHaveLength(32);
+		expect(isAlephKey(alephKey)).toBe(true);
+		expect(hex(backupKey)).not.toBe(hex(first.values.dbKey));
+
+		// Again: they stay what they are, and so does the books' identity.
+		const again = await ensureBackupKeys(await openBooksVault({ ...a, storage }), storage);
+		expect(hex(/** @type {Uint8Array} */ (again.values.backupKey))).toBe(hex(backupKey));
+		expect(hex(/** @type {Uint8Array} */ (again.values.alephKey))).toBe(hex(alephKey));
+		expect(hex(/** @type {Uint8Array} */ (again.values.booksSecret))).toBe(
+			hex(/** @type {Uint8Array} */ (first.values.booksSecret))
+		);
+
+		// Through another slot: the same keys, so B can make a backup and open A's.
+		await addBooksSlot(again, b, storage);
+		const viaB = await openBooksVault({ ...b, storage });
+		expect(hex(/** @type {Uint8Array} */ (viaB.values.backupKey))).toBe(hex(backupKey));
+		expect(hex(/** @type {Uint8Array} */ (viaB.values.alephKey))).toBe(hex(alephKey));
+
+		// Sealed: neither key is in the stored record as it is.
+		const stored = /** @type {string} */ (storage.getItem(VAULTS_STORAGE_KEY));
+		for (const secret of [backupKey, alephKey]) expect(stored).not.toContain(hex(secret));
+	});
+
+	it('backup keys come only after the books’ identity, and a broken Aleph key is not read', async () => {
+		const storage = memoryStorage();
+		const a = passkey();
+		const opened = await openBooksVault({ ...a, storage });
+		await expect(ensureBackupKeys(opened, storage)).rejects.toBeInstanceOf(VaultStorageError);
+
+		const withIdentity = await ensureBooksSecret(opened, storage);
+		await updateBooksVault(
+			withIdentity,
+			{
+				...withIdentity.values,
+				backupKey: new Uint8Array(32).fill(1),
+				alephKey: new Uint8Array(32)
+			},
+			storage
+		);
+		await expect(openBooksVault({ ...a, storage })).rejects.toThrow(/Aleph key that is no key/);
 	});
 
 	it('records the move in place: the same vault, the same slots, the old addresses', async () => {
