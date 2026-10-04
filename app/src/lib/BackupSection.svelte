@@ -129,6 +129,14 @@
 			{:else}
 				<p class="text-faint" data-testid="backup-grant-unknown">{t('backup.grantUnknown')}</p>
 			{/if}
+			{#each app.backup.retired as retired (retired)}
+				<div class="space-y-1" data-testid="backup-retired">
+					<p class="text-heading">{t('backup.retired', { address: retired })}</p>
+					<pre
+						class="overflow-x-auto rounded-md border border-border bg-surface-2 p-2 font-mono text-xs select-all"
+						data-testid="backup-revoke-command">pnpm setup:aleph -- --revoke {retired}</pre>
+				</div>
+			{/each}
 			<p class="text-text">
 				<span class="text-faint">{t('backup.credits')}:</span>
 				<span data-testid="backup-credits"

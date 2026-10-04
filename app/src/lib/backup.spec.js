@@ -16,7 +16,9 @@ import { createOrbitDB, useIdentityProvider } from '@orbitdb/core';
 import * as dagCbor from '@ipld/dag-cbor';
 import {
 	OrbitDBWebAuthnIdentityProviderFunction,
-	createSecretSigner
+	createSecretSigner,
+	deriveAesKey,
+	slotIdFor
 } from '@le-space/orbitdb-identity-provider-webauthn-did';
 import {
 	openAppBackup,
@@ -38,10 +40,20 @@ import {
 	findBackups,
 	isGranted,
 	keepBackup,
-	pickBackup
+	pickBackup,
+	vaultOfBackup
 } from './backup.js';
 import { booksAccessController } from './books-move.js';
-import { ensureBackupKeys, ensureBooksSecret, openBooksVault } from './books-vault.js';
+import {
+	VAULT_SLOT_INFO,
+	addBooksSlot,
+	ensureBackupKeys,
+	ensureBooksSecret,
+	openBooksVault,
+	renewBooksVault,
+	valuesOfVault,
+	vaultHasSlotFor
+} from './books-vault.js';
 import { payloadEncryption } from './entry-encryption.js';
 import { createOfflineLibp2p } from './network.js';
 import { BOOKS_IDENTITY_INFO, createBooksIdentities } from './session-identities.js';
@@ -221,6 +233,65 @@ describe('the backup file', () => {
 			'Erster Kunde AG'
 		]);
 		await back.close();
+	});
+
+	it('after a key is removed, an older backup opens with the key its own vault holds, and the removed key opens no newer one', async () => {
+		const storage = memoryStorage();
+		const key = () => ({
+			prfOutput: crypto.getRandomValues(new Uint8Array(32)),
+			rawCredentialId: crypto.getRandomValues(new Uint8Array(16))
+		});
+		const [ka, kb, kc] = [key(), key(), key()];
+		let three = await ensureBackupKeys(
+			await ensureBooksSecret(await openBooksVault({ ...ka, storage }), storage),
+			storage
+		);
+		three = await addBooksSlot(await addBooksSlot(three, kb, storage), kc, storage);
+		const older = await buildBackup({
+			databases: storeA.databases(),
+			vault: three.vault,
+			backupKey: /** @type {Uint8Array} */ (three.values.backupKey)
+		});
+		// C is removed with A; B answers.
+		const renewed = await renewBooksVault(
+			await openBooksVault({ ...ka, storage }),
+			{ remove: await slotIdFor(kc.rawCredentialId), others: [kb] },
+			storage
+		);
+		const newer = await buildBackup({
+			databases: storeA.databases(),
+			vault: renewed.vault,
+			backupKey: /** @type {Uint8Array} */ (renewed.values.backupKey)
+		});
+		const open = async (/** @type {Uint8Array} */ bytes, /** @type {Uint8Array} */ backupKey) =>
+			openAppBackup(bytes, { decrypt: (await backupCipher(backupKey)).decrypt, app: 'invoice' });
+
+		// The older backup: A reads its key from the vault in front of it, with
+		// the slot key A unlocked with; the renewed key does not open it.
+		const { backupKey: itsOwn } = await valuesOfVault(
+			await vaultOfBackup(older.bytes),
+			renewed.slot
+		);
+		await expect(open(older.bytes, /** @type {Uint8Array} */ (itsOwn))).resolves.toBeTruthy();
+		await expect(
+			open(older.bytes, /** @type {Uint8Array} */ (renewed.values.backupKey))
+		).rejects.toThrow();
+
+		// The newer backup: no slot for C in front, and what C knew does not open it.
+		const front = await vaultOfBackup(newer.bytes);
+		expect(await vaultHasSlotFor(front, kc.rawCredentialId)).toBe(false);
+		expect(await vaultHasSlotFor(front, kb.rawCredentialId)).toBe(true);
+		const slotC = {
+			slotKey: await deriveAesKey(kc.prfOutput, VAULT_SLOT_INFO),
+			rawCredentialId: kc.rawCredentialId
+		};
+		const knownToC = await valuesOfVault(await vaultOfBackup(older.bytes), slotC);
+		await expect(
+			open(newer.bytes, /** @type {Uint8Array} */ (knownToC.backupKey))
+		).rejects.toThrow();
+		await expect(
+			open(newer.bytes, /** @type {Uint8Array} */ (renewed.values.backupKey))
+		).resolves.toBeTruthy();
 	});
 });
 

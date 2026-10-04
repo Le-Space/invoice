@@ -53,13 +53,28 @@ Insgesamt drei Abfragen. Hat keine Sicherung ein Fach für den Passkey, sagt die
 
 ## Einen Schlüssel entfernen
 
-Entfernen nimmt das Fach des Schlüssels aus dem Tresor hier und damit aus jeder Sicherung danach. Die Sicherungen davor erreicht es nicht:
+_Einstellungen → Schlüssel → „Entfernen“_, auch für einen Schlüssel, den dieser Browser nicht hinterlegt hat, wie meist einen verlorenen. Entfernen erneuert den Tresor:
 
-- sie tragen das Fach des Schlüssels weiter, und der Schlüssel öffnet sie;
+- **Neue Schlüssel.** Der Tresor bekommt einen neuen Tresorschlüssel, einen neuen Dateischlüssel (`backupKey`) und einen neuen Sicherungsschlüssel (`alephKey`). Der entfernte Schlüssel kannte den alten Tresorschlüssel, und jede Sicherung trägt den Tresor vorn; ein neuer Dateischlüssel unter dem alten Tresorschlüssel wäre für ihn kein Geheimnis.
+- **Ein Fach für jeden Schlüssel, der bleibt.** Der Schlüssel, mit dem entsperrt ist, wird nicht gefragt. Jeder weitere, der bleibt, wird einmal gefragt (eine Berührung). Einen, der bleibt, aber in diesem Browser nicht hinterlegt ist, kann die App nicht fragen, und nichts ändert sich: Entsperre einmal mit ihm („Passkey wiederherstellen“), dann entferne.
+- **Eine neue Freigabe.** Der neue Sicherungsschlüssel hat eine neue Adresse, die das zahlende Konto noch nicht freigegeben hat. _Einstellungen → Sicherung_ zeigt den Befehl dafür und den, der die Freigabe des alten zurücknimmt:
+
+  ```sh
+  pnpm setup:aleph -- --authorize <neue Adresse> --channel INVOICE-BACKUP
+  pnpm setup:aleph -- --revoke <alte Adresse>
+  ```
+
+  Solange die alte Freigabe besteht, kann der entfernte Schlüssel auf Kosten des Kontos weiter Dateien in `INVOICE-BACKUP` aufbewahren lassen. Die Seite nennt die alte Adresse, bis das Konto sie nicht mehr erlaubt.
+
+Was Entfernen nicht erreicht:
+
+- die Sicherungen davor tragen das Fach des entfernten Schlüssels weiter, und er öffnet sie;
 - jeder, der das zahlende Konto kennt, kann sie abrufen;
-- was der Schlüssel darin findet, schließt den Dateischlüssel ein, den Entfernen nicht erneuert; mit einer solchen Sicherung kann er also auch spätere Sicherungsdateien lesen.
+- Datenbankschlüssel, Datenbanknamen und die Identität der Bücher bleiben dieselben.
 
-Einen verlorenen Sicherheitsschlüssel schützt weiter seine PIN. Gegen einen gestohlenen samt PIN reicht Entfernen nicht: Die Bücher müssten auf neue Geheimnisse umziehen, und das kann die App noch nicht.
+Neue Sicherungen öffnet der entfernte Schlüssel ab dann nicht mehr: Er hat kein Fach in ihrem Tresor, und was er kannte, öffnet die Datei nicht. Einen verlorenen Sicherheitsschlüssel schützt weiter seine PIN. Gegen einen gestohlenen samt PIN reicht Entfernen für das, was er schon gesehen hat, nicht: Die Bücher müssten auf neue Geheimnisse umziehen, und das kann die App noch nicht.
+
+Andere Browser mit einer Kopie dieser Bücher behalten die alten Schlüssel. Führe die Bücher in einem Browser; ein anderer holt sie sich aus einer Sicherung.
 
 ## Was hinausgeht
 
@@ -79,7 +94,7 @@ Einen verlorenen Sicherheitsschlüssel schützt weiter seine PIN. Gegen einen ge
   - Der Kopf ist der Tresor-Datensatz als JSON: Version 1, AES-GCM, eine ID, der versiegelte Inhalt und die Fächer mit `kid`, `iv` und `ciphertext`.
   - Der Rumpf sind die drei Sammlungen, Block für Block (`bundleDatabases`), als eine CAR-Datei, versiegelt mit AES-GCM unter dem `backupKey` des Tresors.
   - Das Manifest darin nennt den SHA-256 des Kopfs; ein veränderter Kopf wird abgelehnt.
-- **Schlüssel:** Der Tresor (Version 3) hält `backupKey` (AES-GCM) und `alephKey` (secp256k1), je 32 zufällige Bytes. Sie liegen neben Datenbankschlüssel, Datenbanknamen, Peer-Seed und dem Geheimnis der Bücher-Identität und sind für jedes Fach gleich.
+- **Schlüssel:** Der Tresor (Version 3) hält `backupKey` (AES-GCM) und `alephKey` (secp256k1), je 32 zufällige Bytes. Sie liegen neben Datenbankschlüssel, Datenbanknamen, Peer-Seed und dem Geheimnis der Bücher-Identität und sind für jedes Fach gleich. Entfernen macht einen neuen Tresor (`renewBooksVault`: neue ID und neuer Tresorschlüssel, neue `backupKey` und `alephKey`, ein Fach für jeden Schlüssel, der bleibt). Jeder Fachschlüssel wird vorher an seinem alten Fach geprüft. Die Adressen ausgemusterter Aleph-Schlüssel bleiben in den versiegelten Einstellungen (`backup/retired`), bis das Konto sie nicht mehr erlaubt.
 - **STORE:**
   - Kanal `INVOICE-BACKUP`, `content.address` ist das zahlende Konto, `payment: { type: "credit" }`;
   - unterschrieben mit `personal_sign` vom `alephKey`;
@@ -90,7 +105,8 @@ Einen verlorenen Sicherheitsschlüssel schützt weiter seine PIN. Gegen einen ge
   3. Jeder Kopf wird ohne Schlüssel gelesen.
   4. Genommen wird die erste, neueste zuerst, deren Tresor ein Fach mit `kid` = SHA-256 der Credential-ID des Passkeys hat.
 - **Wiederherstellen:**
-  - Der Tresor kommt in diesen Browser, außer er würde kollidieren: Öffnet hier schon ein Tresor anderer Bücher mit einem seiner Schlüssel, wird die Sicherung abgelehnt.
+  - Der Tresor kommt nur in diesen Browser, wenn hier kein Tresor ein Fach für den Passkey hat; hat einer eines, öffnen die Bücher, wie sie sind. Geöffnet wird die Sicherung mit dem `backupKey` des Tresors vorn, gelesen mit dem Fachschlüssel des Passkeys; so geht auch eine Sicherung von vor einem Entfernen auf.
+  - Ein Tresor, der kollidieren würde, wird abgelehnt: wenn hier schon ein Tresor anderer Bücher, oder ein älterer dieser, mit einem seiner Schlüssel öffnet.
   - Die Bücher öffnen unter ihren eigenen Adressen, und `restoreAppBackup` führt zusammen und lehnt fremde Bücher ab.
   - Scheitert etwas, kommt der eingespielte Tresor wieder heraus, und ein Passkey ohne Bücher hier wird nicht behalten.
 - **Verlauf:** in den versiegelten Einstellungen (`backup/history`, die neuesten 50). Jeder Eintrag trägt die Fach-Kennungen des Tresors, den die Sicherung trägt; die Seite vergleicht sie mit den Fächern von jetzt.

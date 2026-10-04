@@ -255,3 +255,143 @@ test('a passkey added after the last backup brings nothing back, and nothing is 
 	await page.getByRole('link', { name: 'Einstellungen' }).click();
 	await expect(page.getByTestId('key-row')).toHaveCount(1);
 });
+
+test('removing a key renews the backup keys: the removed key opens no newer backup', async ({
+	page
+}) => {
+	test.setTimeout(300_000);
+	const owner = toChecksumAddress(`0x${'7c'.repeat(20)}`);
+	await page.addInitScript((url) => localStorage.setItem('invoice.e2e.alephUrl', url), aleph.url);
+	const cdp = await page.context().newCDPSession(page);
+	await cdp.send('WebAuthn.enable');
+	const { authenticatorId: keyA } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+		options: KEY
+	});
+	/** @param {string} authenticatorId @param {boolean} enabled */
+	const presence = (authenticatorId, enabled) =>
+		cdp.send('WebAuthn.setAutomaticPresenceSimulation', { authenticatorId, enabled });
+	/** Only these keys answer. @param {string[]} on @param {string[]} off */
+	const only = async (on, off) => {
+		for (const id of off) await presence(id, false);
+		for (const id of on) await presence(id, true);
+	};
+	await recordCeremonies(page);
+
+	// Books made with key A, a first backup for the paying account.
+	await page.goto('/');
+	await page.getByTestId('passkey-label').fill('Laptop');
+	await page.getByRole('button', { name: 'Passkey anlegen' }).click();
+	await expect(page.getByTestId('own-did')).toBeVisible();
+	await page.getByRole('link', { name: 'Einstellungen' }).click();
+	await page.getByTestId('issuer-name').fill('Wolkenfabrik Hosting UG');
+	await page.getByTestId('issuer-address').fill('Musterstraße 1\n12345 Musterstadt');
+	await page.getByTestId('crypto-eth').fill('0x0000000000000000000000000000000000000001');
+	await page.getByTestId('save-settings').click();
+	await expect(page.getByRole('status').first()).toContainText('Gespeichert');
+	const first = await issue(page, 'Erster Kunde AG');
+	await page.getByRole('link', { name: 'Einstellungen' }).click();
+	const section = page.getByTestId('backup');
+	await expect(section.getByTestId('backup-address')).toHaveText(/0x[0-9a-fA-F]{40}/);
+	const before = /** @type {string} */ (
+		await section.getByTestId('backup-address').textContent()
+	).trim();
+	aleph.grant(owner, {
+		address: before,
+		types: ['STORE'],
+		channels: ['INVOICE-BACKUP'],
+		chain: 'ETH'
+	});
+	aleph.fund(owner, 1_000_000);
+	await section.getByTestId('backup-owner').fill(owner);
+	await section.getByTestId('backup-owner-save').click();
+	await expect(section.getByTestId('backup-granted')).toBeVisible();
+
+	// Keys B and C, each on its own USB key.
+	const { authenticatorId: keyB } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+		options: { ...KEY, transport: 'usb' }
+	});
+	await only([keyB], [keyA]);
+	await page.getByTestId('key-label').fill('YubiKey Schublade');
+	await page.getByTestId('key-add').click();
+	await expect(page.getByTestId('key-row')).toHaveCount(2);
+	const { authenticatorId: keyC } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+		options: { ...KEY, transport: 'usb' }
+	});
+	await only([keyC], [keyA, keyB]);
+	await page.getByTestId('key-label').fill('YubiKey Tasche');
+	await page.getByTestId('key-add').click();
+	await expect(page.getByTestId('key-row')).toHaveCount(3);
+
+	// A backup all three keys open.
+	await section.getByTestId('backup-now').click();
+	await expect(section.getByTestId('backup-row')).toHaveCount(1, { timeout: 60_000 });
+	await expect(section.getByTestId('backup-opens')).toContainText('„YubiKey Tasche“');
+
+	// C is lost. Removed with A, which unlocked the books; B, which stays, is asked once.
+	await only([keyB], [keyA, keyC]);
+	await takeCeremonies(page);
+	await page
+		.getByTestId('key-row')
+		.filter({ hasText: 'YubiKey Tasche' })
+		.getByTestId('key-remove')
+		.click();
+	await expect(page.getByTestId('key-row')).toHaveCount(2);
+	await expect(page.getByTestId('keys-error')).toHaveCount(0);
+	expect((await takeCeremonies(page)).map((c) => [c.kind, c.prf])).toEqual([['get', true]]);
+
+	// A new Aleph key: not allowed yet, and the old one's grant to be taken back.
+	await expect(section.getByTestId('backup-address')).not.toHaveText(before);
+	const after = /** @type {string} */ (
+		await section.getByTestId('backup-address').textContent()
+	).trim();
+	await expect(section.getByTestId('backup-not-granted')).toBeVisible();
+	await expect(section.getByTestId('backup-revoke-command')).toHaveText(
+		`pnpm setup:aleph -- --revoke ${before}`
+	);
+	// What belege's `--authorize` and `--revoke` do, done in the fake.
+	aleph.grant(owner, {
+		address: after,
+		types: ['STORE'],
+		channels: ['INVOICE-BACKUP'],
+		chain: 'ETH'
+	});
+	aleph.revoke(owner, before);
+	await section.getByTestId('backup-check').click();
+	await expect(section.getByTestId('backup-granted')).toBeVisible();
+	await expect(section.getByTestId('backup-retired')).toHaveCount(0);
+
+	// A backup under the new keys: C has no slot in front of it.
+	await section.getByTestId('backup-now').click();
+	await expect(section.getByTestId('backup-row')).toHaveCount(2, { timeout: 60_000 });
+	await expect(section.getByTestId('backup-opens').first()).toHaveText(
+		'Öffnet mit „Laptop“, „YubiKey Schublade“'
+	);
+	expect(aleph.stores.at(-1)).toMatchObject({ sender: after, owner, status: 'processed' });
+
+	// On an empty device, C finds only the backup from before it was removed,
+	// with the old Aleph key, which the account no longer allows.
+	await forgetThisDevice(page);
+	await only([keyC], [keyA, keyB]);
+	await page.goto('/');
+	await page.getByTestId('restore-owner').fill(owner);
+	await page.getByTestId('restore-start').click();
+	await expect(page.getByTestId('own-did')).toBeVisible({ timeout: 90_000 });
+	expect(await invoiceNumbers(page)).toEqual([first]);
+	await page.getByRole('link', { name: 'Einstellungen' }).click();
+	await expect(page.getByTestId('key-row')).toHaveCount(3);
+	await expect(section.getByTestId('backup-address')).toHaveText(before);
+	await expect(section.getByTestId('backup-not-granted')).toBeVisible();
+
+	// B, which stays, gets the newest backup, under the new keys.
+	await forgetThisDevice(page);
+	await only([keyB], [keyA, keyC]);
+	await page.goto('/');
+	await page.getByTestId('restore-owner').fill(owner);
+	await page.getByTestId('restore-start').click();
+	await expect(page.getByTestId('own-did')).toBeVisible({ timeout: 90_000 });
+	await page.getByRole('link', { name: 'Einstellungen' }).click();
+	await expect(page.getByTestId('key-row')).toHaveCount(2);
+	await expect(section.getByTestId('backup-address')).toHaveText(after);
+	await expect(section.getByTestId('backup-granted')).toBeVisible();
+	await expect(section.getByTestId('backup-row')).toHaveCount(2);
+});
