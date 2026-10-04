@@ -30,3 +30,15 @@ the pattern, not the case.
 - Never print or commit secrets: `.env`, tokens, keys.
 - A pull request always against `main`, never stacked on another branch; check
   that a PR is still open before pushing to its branch.
+
+## The books stay off the network
+
+- OrbitDB and Helia run on the offline libp2p node (`app/src/lib/network.js`):
+  no transport, no listen address, no discovery. Never give that node a
+  transport, and never put OrbitDB, Bitswap or gossipsub on the UCEP node
+  (`app/src/lib/ucep/net.js`), the one node that goes through a relay.
+- The entries are sealed with `data` encryption only; there is no `replication`
+  layer yet. Until the app has one, and a proof that only the right devices or
+  people replicate (as Belege's `sync/device-gate.js`), this separation is what
+  keeps the sealed books off any relay. `app/src/lib/node-separation.spec.js`
+  fails when it changes.
