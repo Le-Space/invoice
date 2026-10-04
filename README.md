@@ -90,8 +90,9 @@ empty device, "Bücher aus einer Sicherung holen" needs that account's address,
 which is public but the only way to the backups, and a passkey registered when
 the backup was made: the newest backup with a slot for it comes back, merged
 into the books; and the app asks before a passkey without books here starts
-empty ones. A removed key still opens the backups made before it was removed
-([docs/backup.md](docs/backup.md)). Nothing is readable on disk and no private
+empty ones. Removing a key renews the vault, its file key and its backup key,
+with a slot for every key that stays: the removed key opens no new backup, but
+still the ones made before ([docs/backup.md](docs/backup.md)). Nothing is readable on disk and no private
 key is kept
 (`app/src/lib/node.js`, `books-vault.js`, `books-move.js`,
 `session-identities.js`, `backup.js`). The

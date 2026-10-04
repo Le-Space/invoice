@@ -1,7 +1,9 @@
 <script>
 	// The passkeys that open these books: one per slot in the books' vault
 	// (books-vault.js). A second one is added here while the books are open; a
-	// key is removed here too, never the last and never the one in use.
+	// key is removed here too, never the last and never the one in use — also
+	// one this browser does not keep, as a lost one usually is. Removing renews
+	// the vault: every other key that stays is asked once.
 	import { t } from './i18n/index.js';
 	import { addKey, app, removeKey } from './session.svelte.js';
 
@@ -30,7 +32,7 @@
 	<p class="text-sm leading-relaxed text-text">{t('keys.intro')}</p>
 
 	<ul class="divide-y divide-border rounded-md border border-border">
-		{#each app.keys as key, i (key.credentialId ?? `slot-${i}`)}
+		{#each app.keys as key (key.kid)}
 			<li class="flex items-center justify-between gap-3 px-3 py-2" data-testid="key-row">
 				<span class="min-w-0 truncate text-sm text-heading">
 					{key.label ?? t('keys.unnamed')}
@@ -40,12 +42,12 @@
 						>
 					{/if}
 				</span>
-				{#if key.credentialId && !key.current && !onlyOne}
+				{#if !key.current && !onlyOne}
 					<button
 						type="button"
 						class={secondary}
 						disabled={busy}
-						onclick={() => removeKey(/** @type {string} */ (key.credentialId))}
+						onclick={() => removeKey(key.kid)}
 						data-testid="key-remove">{t('keys.remove')}</button
 					>
 				{/if}
@@ -76,7 +78,9 @@
 	{#if app.keysStatus === 'adding'}
 		<p class="text-sm text-text" role="status" data-testid="keys-busy">{t('keys.adding')}</p>
 	{:else if app.keysStatus === 'removing'}
-		<p class="text-sm text-text" role="status" data-testid="keys-busy">{t('keys.removing')}</p>
+		<p class="text-sm text-text" role="status" data-testid="keys-busy">
+			{app.keysConfirming ? t('keys.confirming', { key: app.keysConfirming }) : t('keys.removing')}
+		</p>
 	{/if}
 	{#if app.keysError}
 		<p

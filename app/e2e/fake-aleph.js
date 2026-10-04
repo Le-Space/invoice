@@ -28,7 +28,8 @@
 //   GET  /api/v0/messages.json   STOREs by `owners` (the paying account) or `addresses` (the sender)
 //   GET  /api/v0/addresses/<address>/balance   `credit_balance`
 // For the spec: `grant(owner, entry)` does what belege's
-// `pnpm setup:aleph -- --authorize` does; `fund(owner, credits)` what a transfer does.
+// `pnpm setup:aleph -- --authorize` does, `revoke(owner, address)` what
+// `--revoke` does; `fund(owner, credits)` what a transfer does.
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 
@@ -324,6 +325,16 @@ export async function startFakeAleph() {
 				(g) => String(g.address).toLowerCase() !== String(entry.address).toLowerCase()
 			);
 			grants.set(key, [...others, entry]);
+		},
+		/** @param {string} owner @param {string} address */
+		revoke(owner, address) {
+			const key = toChecksumAddress(owner);
+			grants.set(
+				key,
+				(grants.get(key) ?? []).filter(
+					(g) => String(g.address).toLowerCase() !== String(address).toLowerCase()
+				)
+			);
 		},
 		/** Credits on an account, as a transfer puts them there. @param {string} owner @param {number} amount */
 		fund(owner, amount) {

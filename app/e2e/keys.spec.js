@@ -10,7 +10,8 @@
 // The owner's acceptance for step 3: books made with key A; key B added; the
 // books opened with B, which reads what A wrote and writes itself; A removed;
 // B still opens everything, and A — even restored from its authenticator —
-// opens nothing here, not even books of its own.
+// opens nothing here, not even books of its own. Removing renews the vault:
+// new backup keys, the same books, and no prompt, since B unlocked them.
 import { test, expect } from '@playwright/test';
 import { recordCeremonies, takeCeremonies } from './webauthn.js';
 
@@ -134,10 +135,20 @@ test('a second key opens and writes the books, and the first can go', async ({ p
 
 	// A goes. B stays, and is back to being the only one.
 	await page.getByRole('link', { name: 'Einstellungen' }).click();
+	await takeCeremonies(page);
 	const rowA = page.getByTestId('key-row').filter({ hasText: 'Laptop' });
 	await rowA.getByTestId('key-remove').click();
 	await expect(page.getByTestId('key-row')).toHaveCount(1);
 	await expect(page.getByTestId('key-row').first()).toContainText('YubiKey Schublade');
+	// The vault is renewed without a prompt: B, which stays, unlocked it. What
+	// a backup is sealed and kept with is new; the books are the same.
+	expect(await takeCeremonies(page)).toEqual([]);
+	const renewed = await secrets(page);
+	expect(renewed.databaseKey).toBe(books.databaseKey);
+	expect(renewed.booksSecret).toBe(books.booksSecret);
+	expect(renewed.ucepSeed).toBe(books.ucepSeed);
+	expect(renewed.backupKey).not.toBe(books.backupKey);
+	expect(renewed.alephKey).not.toBe(books.alephKey);
 	await page.getByRole('link', { name: 'Rechnungen', exact: true }).click();
 	await expect(page.getByTestId('one-key-hint')).toBeVisible();
 
