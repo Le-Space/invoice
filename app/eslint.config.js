@@ -1,5 +1,5 @@
 // Ported from Le-Space/simple-todo apps/invoice01 (eslint.config.js) at 56647d5.
-// Changed: no build-time globals, because this app defines none.
+// Changed: the build-time globals are this app's (vite.config.js `define`, src/app.d.ts).
 import prettier from 'eslint-config-prettier';
 import { includeIgnoreFile } from '@eslint/compat';
 import js from '@eslint/js';
@@ -19,7 +19,13 @@ export default [
 	...svelte.configs.prettier,
 	{
 		languageOptions: {
-			globals: { ...globals.browser, ...globals.node }
+			globals: {
+				...globals.browser,
+				...globals.node,
+				__BUILD_COMMIT__: 'readonly',
+				__BUILD_DATE__: 'readonly',
+				__BUILD_RELEASE__: 'readonly'
+			}
 		}
 	},
 	{
