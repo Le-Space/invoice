@@ -115,7 +115,10 @@ and is published here under MIT.
   (`get-pdf`). Since extension 0.2.0 it also lists the issued invoices
   (`list-issued`, with their PDFs by `get-pdf`) and reports which were paid
   (`record-payment`); the list and the invoice then say bezahlt, teilweise
-  bezahlt, offen or überfällig. A stranger gets `help` and nothing else. The peer id comes from
+  bezahlt, offen or überfällig. Since 0.3.0 each listed invoice also
+  carries its net, its VAT breakdown by rate and category (`S`, `AE`
+  reverse charge, `E` small business, …) and the customer's VAT ID, so the
+  bookkeeping app has the output VAT without reading the PDF. A stranger gets `help` and nothing else. The peer id comes from
   the books' vault, the grants are kept sealed. The app connects to the relay
   only while an app is paired, or when asked to under "Verbindungen": the relay
   sees the device's IP address.
