@@ -10,7 +10,13 @@ import { identify, identifyPush } from '@libp2p/identify';
 import { createConsumer } from '@le-space/ucep';
 import { t } from '../i18n/index.js';
 import { cancellationFor, emptyDraft, emptyLine, issue } from '@le-space/invoice/records';
-import { SCOPES, createInvoiceProvider, eigenbelegFile, invoiceCommands } from './provider.js';
+import {
+	SCOPES,
+	createInvoiceProvider,
+	eigenbelegFile,
+	invoiceCommands,
+	listedVat
+} from './provider.js';
 import { LAST_USED_EVERY_MS, collectionKeyValue, onlyRecentlyUsed } from './store.js';
 
 /** A collection that keeps records in memory, the way store/repository.js does. */
@@ -333,6 +339,56 @@ function issued(/** @type {any} */ { number, issueDate, gross, customer = 'Beisp
 	return withoutId(record);
 }
 
+describe('the VAT an issued invoice names (0.3.0)', () => {
+	const money = (/** @type {bigint | string} */ units, /** @type {any} */ unit) => ({
+		value: (Number(units) / 10 ** unit.decimals).toFixed(unit.decimals),
+		currency: unit.code
+	});
+	/** A made-up issued invoice in a tax mode. @param {'standard' | 'kleinunternehmer' | 'reverse-charge'} taxMode @param {string} [vatId] */
+	const inMode = (taxMode, vatId) =>
+		issue(
+			{
+				...emptyDraft({
+					taxMode,
+					issueDate: '2026-09-01',
+					customer: {
+						name: 'Beispiel Kunde GmbH',
+						address: 'Beispielweg 2\n54321 Beispielstadt',
+						...(vatId ? { vatId } : {})
+					}
+				}),
+				lines: [emptyLine({ description: 'Beratung', unitPrice: '10000', vatRate: 19 })]
+			},
+			{
+				number: 'RE-2026-0100',
+				issuer: { name: 'Wolkenfabrik Hosting UG', address: 'Musterstraße 1\n12345 Musterstadt' },
+				issuedBy: 'did:key:z6MkInvoiceProviderSpec',
+				issuedAt: '2026-09-01T09:00:00.000Z'
+			}
+		);
+
+	it('standard: the net and 19 % by its category S; no VAT ID, none sent', () => {
+		expect(listedVat(inMode('standard'), money)).toEqual({
+			net: { value: '100.00', currency: 'EUR' },
+			vat: [{ rate: '19', category: 'S', amount: { value: '19.00', currency: 'EUR' } }]
+		});
+	});
+
+	it('reverse charge to a customer abroad: AE at 0, with the customer’s VAT ID', () => {
+		expect(listedVat(inMode('reverse-charge', 'ATU00000000'), money)).toEqual({
+			vatId: 'ATU00000000',
+			net: { value: '100.00', currency: 'EUR' },
+			vat: [{ rate: '0', category: 'AE', amount: { value: '0.00', currency: 'EUR' } }]
+		});
+	});
+
+	it('a small business (§19 UStG): E at 0', () => {
+		expect(listedVat(inMode('kleinunternehmer'), money).vat).toEqual([
+			{ rate: '0', category: 'E', amount: { value: '0.00', currency: 'EUR' } }
+		]);
+	});
+});
+
 /** @param {any} record */
 function withoutId(record) {
 	const rest = { ...record };
@@ -340,7 +396,7 @@ function withoutId(record) {
 	return rest;
 }
 
-describe('issued invoices and their payments (0.2.0)', () => {
+describe('issued invoices and their payments (0.2.0, VAT since 0.3.0)', () => {
 	/** @type {any[]} */ const nodes = [];
 	/** @type {any} */ let books;
 	/** @type {any} */ let reader;
@@ -416,6 +472,9 @@ describe('issued invoices and their payments (0.2.0)', () => {
 			dueOn: '2026-09-15',
 			customer: { name: 'Beispiel Kunde GmbH' },
 			total: { value: '119.00', currency: 'EUR' },
+			// Since 0.3.0: the net and the VAT per rate and category.
+			net: { value: '100.00', currency: 'EUR' },
+			vat: [{ rate: '19', category: 'S', amount: { value: '19.00', currency: 'EUR' } }],
 			paid: { value: '0.00', currency: 'EUR' },
 			payments: []
 		});
@@ -423,7 +482,10 @@ describe('issued invoices and their payments (0.2.0)', () => {
 		expect(all.invoices[4]).toMatchObject({
 			number: 'RE-2026-0005',
 			state: 'issued',
-			total: { value: '-119.00', currency: 'EUR' }
+			total: { value: '-119.00', currency: 'EUR' },
+			// A Storno: negative net and VAT too.
+			net: { value: '-100.00', currency: 'EUR' },
+			vat: [{ rate: '19', category: 'S', amount: { value: '-19.00', currency: 'EUR' } }]
 		});
 		expect(all.invoices[4].dueOn).toBeUndefined();
 

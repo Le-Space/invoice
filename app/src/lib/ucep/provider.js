@@ -1,5 +1,5 @@
 // The invoice extension of UCEP, served by this app (Le-Space/ucep-spec,
-// extensions/invoice.md, 0.2.0): a paired app — Belege — asks for a
+// extensions/invoice.md, 0.3.0): a paired app — Belege — asks for a
 // self-issued receipt (Eigenbeleg), learns its state and fetches its PDF; and
 // it reads the issued invoices and reports which of them were paid.
 //
@@ -57,12 +57,37 @@ const LIST_BYTES = { limited: 60 * 1024, direct: 1000 * 1024 };
 
 export { SCOPES, SCOPE_TEXT };
 
+/**
+ * What `list-issued` says about an invoice's VAT since 0.3.0: the net, the
+ * VAT breakdown as the invoice prints it (BG-23: rate, UNTDID 5305 category,
+ * amount) and the customer's VAT ID where the invoice names one. An invoice
+ * without VAT lists its group at 0 with the category that says why: `E` for a
+ * small business, `AE` for a reverse charge.
+ *
+ * @param {any} invoice upgraded
+ * @param {(units: bigint | string, unit: { code: string, decimals: number }) => { value: string, currency: string }} money
+ */
+export function listedVat(invoice, money) {
+	const unit = moneyUnit(invoice);
+	const totals = invoiceTotals(invoice);
+	const vatId = String(invoice.customer?.vatId ?? '').trim();
+	return {
+		...(vatId ? { vatId } : {}),
+		net: money(totals.net, unit),
+		vat: totals.vatBreakdown.map((/** @type {any} */ group) => ({
+			rate: String(group.rate),
+			category: group.category,
+			amount: money(group.tax, unit)
+		}))
+	};
+}
+
 /** @param {(key: string) => string} t */
 export function invoiceManifest(t) {
 	return {
 		id: 'invoice',
 		name: t('ucep.manifest.name'),
-		version: '0.2.0',
+		version: '0.3.0',
 		description: t('ucep.manifest.description'),
 		author: 'Le-Space',
 		scopes: Object.entries(SCOPE_TEXT).map(([name, key]) => ({ name, description: t(key) }))
@@ -226,6 +251,7 @@ export function invoiceCommands({ store, settings, t, now = () => new Date(), gr
 	function listed(invoice) {
 		const unit = moneyUnit(invoice);
 		const total = totalUnits(invoice);
+		const { vatId, net, vat } = listedVat(invoice, money);
 		const payments = Array.isArray(invoice.payments) ? invoice.payments : [];
 		const due = total > 0n ? dueOn(invoice) : '';
 		return {
@@ -234,8 +260,12 @@ export function invoiceCommands({ store, settings, t, now = () => new Date(), gr
 			state: invoice.cancelledBy ? 'cancelled' : 'issued',
 			issuedOn: invoice.issueDate,
 			...(due ? { dueOn: due } : {}),
-			customer: { name: invoice.customer?.name ?? '' },
+			customer: { name: invoice.customer?.name ?? '', ...(vatId ? { vatId } : {}) },
 			total: money(total, unit),
+			// Since 0.3.0: the net and the VAT breakdown as the invoice prints them (BG-23),
+			// so the bookkeeping app has the output VAT without reading the PDF.
+			net,
+			vat,
 			paid: money(paidUnits(payments), unit),
 			payments: payments.map((/** @type {any} */ p) => ({
 				paidOn: p.paidOn,

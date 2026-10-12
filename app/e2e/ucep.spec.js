@@ -136,6 +136,9 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 			state: 'issued',
 			customer: { name: 'Beispiel Kunde GmbH' },
 			total: { value: '119.00', currency: 'EUR' },
+			// Since 0.3.0: what of it is VAT, at which rate and why.
+			net: { value: '100.00', currency: 'EUR' },
+			vat: [{ rate: '19', category: 'S', amount: { value: '19.00', currency: 'EUR' } }],
 			payments: []
 		});
 		const paid = await belege.call(providerId, 'invoice', 'record-payment', {
