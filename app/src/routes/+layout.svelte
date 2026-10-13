@@ -4,9 +4,9 @@
 	// passkey comes first; nothing is shown before the store is open.
 	import '../app.css';
 	import { page } from '$app/state';
-	import PasskeyOnboarding from '$lib/PasskeyOnboarding.svelte';
-	import { t } from '$lib/i18n/index.js';
-	import { app, lock } from '$lib/session.svelte.js';
+	import PasskeyOnboarding from '#lib/PasskeyOnboarding.svelte';
+	import { t } from '#lib/i18n/index.js';
+	import { app, lock } from '#lib/session.svelte.js';
 
 	let { children } = $props();
 

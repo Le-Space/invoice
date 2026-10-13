@@ -4,6 +4,9 @@
 // Changed: the build stamp is the last commit touching the app (not a
 // chapter's), no version defines; unit tests run in Node rather than in a
 // browser, because the store test drives a real OrbitDB and Helia there.
+// SvelteKit 3: the Kit config lives here, svelte.config.js is gone.
+/// <reference types="vitest/config" />
+import adapter from '@sveltejs/adapter-static';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { execFileSync } from 'node:child_process';
@@ -89,7 +92,11 @@ export default defineConfig({
 	},
 	plugins: [
 		tailwindcss(),
-		sveltekit(),
+		// Ported from Le-Space/simple-todo apps/invoice01 (svelte.config.js) at
+		// 56647d5. Changed: no shared brand assets folder; an SPA fallback page,
+		// because every route renders in the browser only (the data lives in
+		// IndexedDB).
+		sveltekit({ adapter: adapter({ fallback: 'index.html' }) }),
 		// libp2p, Helia and the identity provider still reach for Node's
 		// `Buffer`, `process` and friends in a browser. Node has them already.
 		...(isVitest

@@ -2,7 +2,7 @@
 
 _English: [app.md](app.md)_
 
-`app/` ist eine PWA (SvelteKit 2, Svelte 5) auf dem Kern ([core.de.md](core.de.md)). Sie hat drei Seiten:
+`app/` ist eine PWA (SvelteKit 3, Svelte 5) auf dem Kern ([core.de.md](core.de.md)). Sie hat drei Seiten:
 
 - **Rechnungen:**
   - eine Liste und ein Entwurfseditor (Kunde, Daten, Steuerart, Währung und Netz, der Eurokurs für die Umsatzsteuer, Positionen);
