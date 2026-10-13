@@ -1,137 +1,48 @@
 # Invoice
 
-Invoices that live in your own store, not on somebody's server: records,
-number series, templates, PDF and payment codes, as plain JavaScript modules.
+Invoices that live in your own store, not on somebody's server.
 
-This repository continues the invoice chapter `invoice01` of
-[Le-Space/simple-todo](https://github.com/Le-Space/simple-todo). The history of
-its core modules came along; references like `Le-Space/simple-todo#43` in old
-commit messages point to pull requests there.
+- **The core:** plain JavaScript for records, number series, templates, PDF and payment codes.
+- **The app:** a PWA on that core, opened by a passkey. The books are sealed in the browser. A backup goes to Aleph Cloud as one sealed file. Paired apps such as [Belege](https://github.com/Le-Space/belege) ask it for receipts over [UCEP](https://github.com/Le-Space/ucep-spec).
 
-## What is here
+This repository continues the invoice chapter `invoice01` of [Le-Space/simple-todo](https://github.com/Le-Space/simple-todo). The history of its core modules came along; references like `Le-Space/simple-todo#43` in old commit messages point to pull requests there.
 
-`src/core/` – pure modules, no network, no UI, each with its own spec:
+## What works
 
-| Module                               | Does                                                                                                                |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `records.js`                         | The invoice record, issuing (the act that freezes it), Storno, `foldCancellations`                                  |
-| `numbering.js`, `series.js`          | Number series per identity, e.g. `2026-00000-001`                                                                   |
-| `currency.js`                        | The currencies an invoice can be in: EUR, USD, CHF, GBP, BTC, ETH, USDC, NYM, AKT, POL                              |
-| `money.js`                           | Integer smallest units as strings, rounding once, totals per VAT rate, VAT in euros                                 |
-| `customers.js`, `settings.js`        | Customer directory and issuer settings                                                                              |
-| `document.js`, `labels.js`           | The document model a PDF is drawn from, and the words it needs                                                      |
-| `template.js`                        | Letter and closing from a Markdown template the reader owns                                                         |
-| `pdf.js`                             | The PDF (pdf-lib, embedded DejaVu font)                                                                             |
-| `girocode.js`                        | EPC069-12 GiroCode for a SEPA transfer                                                                              |
-| `bip21.js`                           | BIP-21 URI for a Bitcoin payment, address checksum checked                                                          |
-| `eip681.js`                          | EIP-681 URI for Ether or an ERC-20 token on any EVM chain, EIP-55 checksum                                          |
-| `crypto-lines.js`                    | Invoice lines from crypto transactions as Belege books them, with their source kept on the line                     |
-| `payment-code.js`                    | The code a crypto invoice carries: BIP-21, EIP-681 (ETH, POL, USDC) or the address (NYM, AKT)                       |
-| `networks.js`                        | The chains a crypto invoice is paid on, with Belege's chain ids and USDC contracts                                  |
-| `chain-templates.js`                 | Templates per chain: currency, network, usual lines and a letter (NYM, AKT, BTC, ETH, USDC on Base)                 |
-| `eigenbeleg.js`, `eigenbeleg-pdf.js` | Self-issued receipts (Eigenbelege) for UCEP `create-eigenbeleg`: checked arguments, their own number range, the PDF |
-| `payments.js`                        | Payments reported for an issued invoice (UCEP `record-payment`): by reference, part payments, due day               |
-| `duplicates.js`                      | One number on two invoices is reported, not renumbered                                                              |
+- **Invoices in euros and in crypto** (BTC, ETH, USDC, POL, NYM, AKT):
+  - a draft editor and chain templates;
+  - issuing with the next number of this passkey's circle;
+  - the PDF with a GiroCode or a payment code;
+  - a Storno;
+  - the VAT in euros on an invoice in another currency.
+- **Passkeys:** a passkey opens the books. A second key, a YubiKey say, gets a slot of its own in the books' vault, and a key can be removed again, which renews the vault.
+- **Backup:** a backup of the books on Aleph Cloud, made from the browser. On an empty device the books come back with the paying account's address and a passkey that was registered when the backup was made.
+- **Connections:** the UCEP `invoice` extension for paired apps:
+  - Eigenbelege;
+  - the issued invoices, with their net, VAT breakdown and the customer's VAT ID;
+  - payments reported back.
 
-`src/i18n/` – the German and English words of the printed invoice.
+Not yet: e-invoices, offers, sync between one's own devices. See [docs/roadmap.md](docs/roadmap.md).
 
-## Status
+## Two rules
 
-An invoice has a currency (`currency.js`). Every amount is an integer of its
-smallest unit on the invoice, kept as a string: cents, satoshi, uNYM. Ether and
-POL are invoiced in 10⁻⁸, so nobody has to read eighteen decimals;
-`toChainUnits` scales to wei for a payment code or a booking.
+- **The books stay off the network.** OrbitDB and Helia run on an offline node. Only two things leave the device:
+  - a sealed backup, to Aleph;
+  - while an app is paired, what that app asks for over UCEP, end-to-end encrypted through a relay.
+- **An issued invoice is never rewritten.** A correction is a Storno plus a new invoice.
 
-An invoice in another currency than euros that shows VAT also states the VAT
-in euros, with the rate, its source and its day (Art. 230 VAT Directive, §16
-Abs. 6 UStG). Invoices written by the invoice01 chapter (euro cents in numbers)
-are read through `upgradeInvoice`.
+## Read more
 
-A crypto transaction booked in Belege becomes an invoice line with
-`lineFromTransaction`: on an invoice in its own asset the price is the quantity,
-on an invoice in euros the euro value Belege booked. The line says the quantity,
-the rate with its source and day, and the transaction hash, and keeps all of it
-in `line.source`. `eurRateOf` takes the booking's rate as the invoice's rate for
-the VAT in euros.
+| Topic                                             | English                                    | Deutsch                                          |
+| ------------------------------------------------- | ------------------------------------------ | ------------------------------------------------ |
+| The core modules                                  | [docs/core.md](docs/core.md)               | [docs/core.de.md](docs/core.de.md)               |
+| Currencies, crypto invoices, payment codes        | [docs/currencies.md](docs/currencies.md)   | [docs/currencies.de.md](docs/currencies.de.md)   |
+| The app: pages, passkeys, the vault, a second key | [docs/app.md](docs/app.md)                 | [docs/app.de.md](docs/app.de.md)                 |
+| Backup and restore                                | [docs/backup.md](docs/backup.md)           | [docs/backup.de.md](docs/backup.de.md)           |
+| Connections: the UCEP invoice extension           | [docs/connections.md](docs/connections.md) | [docs/connections.de.md](docs/connections.de.md) |
+| What comes next                                   | [docs/roadmap.md](docs/roadmap.md)         | [docs/roadmap.de.md](docs/roadmap.de.md)         |
 
-An invoice in a crypto currency carries a code instead of the GiroCode
-(`payment-code.js`): BIP-21 for Bitcoin, EIP-681 for Ether, POL and USDC with
-the amount in the chain's unit, and the address alone for NYM and AKT, where
-wallets agree on no payment URI. The address comes from the issuer's settings
-and is checked for its chain; an invoice without one cannot be issued.
-
-A crypto invoice names the network it is paid on (`networks.js`): USDC and
-Ether exist on several chains, and a payment on the wrong one does not arrive.
-The code, the address line and the letter say it. Invoices from before networks
-are read as paid on the first network of their currency (Ethereum for ETH and
-USDC). `applyChainTemplate` sets a draft up for a chain — currency, decimals,
-network, the usual lines — and `chainTemplateText` gives the letter to issue
-it with, in German or English.
-
-## The app
-
-`app/` is a PWA (SvelteKit 2, Svelte 5) on the core. A passkey opens it: its
-PRF answer opens the books' vault, which holds the key every OrbitDB database
-is sealed with, the database names, the UCEP peer seed and the secret of the
-books' own identity. The books sign as that identity, and it is the root of
-every collection's access controller, so any passkey with a slot in the vault
-writes as the books; the passkey's DID is kept as each record's `author`.
-Books made before moved once to databases rooted at it; the old ones stay,
-read-only. Under Einstellungen → Schlüssel a second passkey — a YubiKey, say —
-gets a slot of its own, and a key can be removed (never the last, never the one
-in use); a removed key opens nothing in this browser any more. Under
-Einstellungen → Sicherung the books go to Aleph Cloud as one sealed file with
-the vault in front, straight from the browser: a key from the vault signs the
-STORE that keeps it, for a paying account that allowed that key once (belege's
-bridge account, `pnpm setup:aleph -- --authorize`). Any registered passkey can
-make a backup; a backup opens with the passkeys registered when it was made, so
-a key added since needs a new backup, and the page names it until then. On an
-empty device, "Bücher aus einer Sicherung holen" needs that account's address,
-which is public but the only way to the backups, and a passkey registered when
-the backup was made: the newest backup with a slot for it comes back, merged
-into the books; and the app asks before a passkey without books here starts
-empty ones. Removing a key renews the vault, its file key and its backup key,
-with a slot for every key that stays: the removed key opens no new backup, but
-still the ones made before ([docs/backup.md](docs/backup.md)). Nothing is readable on disk and no private
-key is kept
-(`app/src/lib/node.js`, `books-vault.js`, `books-move.js`,
-`session-identities.js`, `backup.js`). The
-session and store layer comes from Le-Space/belege, where its author wrote it,
-and is published here under MIT.
-
-- Invoices: a list, a draft editor (customer, dates, tax mode, currency and
-  network, the euro rate for the VAT, lines), issuing with the next number of
-  this passkey's circle, the PDF, and a Storno.
-- A new invoice can start from a chain template (NYM, AKT, BTC, ETH, USDC on
-  Base).
-- Settings: the issuer, the bank, the crypto addresses (checked for their
-  network), the default tax mode and payment terms.
-
-- Connections: the app serves the UCEP `invoice` extension
-  ([Le-Space/ucep-spec](https://github.com/Le-Space/ucep-spec)) through a
-  relay: the Le-Space relays as their two wallets register them on Aleph
-  (`VITE_RELAY_ADDRS` overrides; a fallback list when Aleph cannot be asked).
-  An app paired by invitation (link or QR code) or by a six-digit code asks
-  for an Eigenbeleg (`create-eigenbeleg`), its state (`status`) and its PDF
-  (`get-pdf`). Since extension 0.2.0 it also lists the issued invoices
-  (`list-issued`, with their PDFs by `get-pdf`) and reports which were paid
-  (`record-payment`); the list and the invoice then say bezahlt, teilweise
-  bezahlt, offen or überfällig. Since 0.3.0 each listed invoice also
-  carries its net, its VAT breakdown by rate and category (`S`, `AE`
-  reverse charge, `E` small business, …) and the customer's VAT ID, so the
-  bookkeeping app has the output VAT without reading the PDF. A stranger gets `help` and nothing else. The peer id comes from
-  the books' vault, the grants are kept sealed. The app connects to the relay
-  only while an app is paired, or when asked to under "Verbindungen": the relay
-  sees the device's IP address.
-
-Not yet: pairing by QR code without any relay (the alpha module
-`@le-space/libp2p-webrtc-qr` exchanges WebRTC signaling as QR codes), sync
-between one's own devices, `create-draft`, and fetching a PDF by
-CID over Bitswap on a relayed connection.
-
-Later: e-invoices (EN 16931, ZUGFeRD/XRechnung), and the invoice extension of
-[UCEP](https://github.com/Le-Space/ucep-spec) so that
-[Belege](https://github.com/Le-Space/belege) can ask for a receipt over libp2p.
+Working on this repository, for people and AI agents alike: [AGENTS.md](AGENTS.md). Never put real invoice data into the repository or onto GitHub.
 
 ## Develop
 
