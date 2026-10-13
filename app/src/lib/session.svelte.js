@@ -16,8 +16,9 @@ import {
 	booksHereFor,
 	booksSlotIds,
 	installBooksVault,
-	removeBooksSlot,
-	uninstallBooksVault
+	renewBooksVault,
+	uninstallBooksVault,
+	valuesOfVault
 } from './books-vault.js';
 import {
 	forgetPasskey,
@@ -38,10 +39,13 @@ import {
 	isAddress,
 	isGranted,
 	keepBackup,
+	keepRetired,
 	loadBackupOwner,
 	loadBackups,
+	loadRetired,
 	pickBackup,
 	rememberBackup,
+	retireAddress,
 	saveBackupOwner
 } from './backup.js';
 import { normaliseInvoiceSettings } from '@le-space/invoice/settings';
@@ -72,6 +76,8 @@ export const app = $state({
 	keys: [],
 	/** @type {'idle' | 'adding' | 'removing'} */
 	keysStatus: 'idle',
+	/** @type {string | null} while removing: the passkey that stays and is asked now */
+	keysConfirming: null,
 	/** @type {string | null} */
 	keysError: null,
 	/** The books' backup on Aleph (backup.js). */
@@ -86,6 +92,8 @@ export const app = $state({
 		credits: null,
 		/** @type {import('./backup.js').BackupRecord[]} newest first */
 		history: [],
+		/** @type {string[]} Aleph keys a removed passkey knew, still allowed by the account */
+		retired: [],
 		/** @type {'' | 'packing' | 'sealing' | 'uploading' | 'keeping'} */
 		step: '',
 		/** @type {{ name: string, index: number, total: number } | null} */
@@ -271,30 +279,60 @@ export async function addKey(label) {
 }
 
 /**
- * A passkey no longer opens these books. Not the last one, and not the one
- * that unlocked them now: nobody can lock themselves out here.
+ * A passkey no longer opens these books, and the vault is renewed
+ * (books-vault.js `renewBooksVault`): a new vault key, a new backup key and a
+ * new Aleph key, with a slot for every passkey that stays. Not the last one,
+ * and not the one that unlocked them now: nobody can lock themselves out here.
  *
- * @param {string} credentialId
+ * The passkey that unlocked needs no prompt; every other one that stays is
+ * asked once, so it gets its slot in the new vault. One this browser does not
+ * keep cannot be asked, and nothing changes. The new Aleph key needs the
+ * paying account's grant, and the old one's grant should be taken back: the
+ * backup section shows both commands.
+ *
+ * @param {string} kid the slot id of the passkey to remove (`app.keys[].kid`)
  */
-export async function removeKey(credentialId) {
+export async function removeKey(kid) {
 	if (!session || app.keysStatus !== 'idle') return;
-	if (credentialId === session.credentialId) {
+	const current = await slotIdFor(session.vault.slot.rawCredentialId);
+	if (kid === current) {
 		app.keysError = t('keys.notCurrent');
 		return;
 	}
-	const passkey = listStoredPasskeys().find((p) => p.credentialId === credentialId);
-	if (!passkey) return;
 	app.keysStatus = 'removing';
 	app.keysError = null;
 	try {
-		session.vault = await removeBooksSlot(session.vault, passkey.credential.rawCredentialId);
-		forgetPasskey(credentialId);
+		/** @type {Record<string, { credentialId: string, label: string, credential: any }>} */
+		const byKid = {};
+		for (const passkey of listStoredPasskeys()) {
+			byKid[await slotIdFor(passkey.credential.rawCredentialId)] = passkey;
+		}
+		const staying = booksSlotIds(session.vault).filter((k) => k !== kid && k !== current);
+		if (staying.some((k) => !byKid[k])) throw new Error(t('keys.cannotAsk'));
+		const others = [];
+		for (const k of staying) {
+			const { label, credential } = byKid[k];
+			app.keysConfirming = label;
+			others.push({
+				prfOutput: await readPrfOutput(credential),
+				rawCredentialId: credential.rawCredentialId
+			});
+		}
+		app.keysConfirming = null;
+		const oldAddress = session.vault.values.alephKey
+			? await backupAddressOf(session.vault.values.alephKey)
+			: null;
+		session.vault = await renewBooksVault(session.vault, { remove: kid, others });
+		if (byKid[kid]) forgetPasskey(byKid[kid].credentialId);
+		if (oldAddress) await retireAddress(session.store.settings, oldAddress);
 		await refreshKeys();
+		await refreshBackup();
 	} catch (error) {
 		console.error('removing a key failed:', error);
 		app.keysError = message(error);
 	} finally {
 		app.keysStatus = 'idle';
+		app.keysConfirming = null;
 	}
 }
 
@@ -308,14 +346,24 @@ export async function refreshBackup() {
 	app.backup.history = await loadBackups(settings);
 	app.backup.granted = null;
 	app.backup.credits = null;
+	const retired = await loadRetired(settings);
+	app.backup.retired = retired.map((entry) => entry.address);
 	const { owner, address } = app.backup;
 	if (!owner || !address) return;
-	const [granted, credits] = await Promise.allSettled([
+	const [granted, credits, ...stillAllowed] = await Promise.allSettled([
 		isGranted({ owner, address }),
-		creditsOf({ owner })
+		creditsOf({ owner }),
+		...retired.map((entry) => isGranted({ owner, address: entry.address }))
 	]);
 	app.backup.granted = granted.status === 'fulfilled' ? granted.value : null;
 	app.backup.credits = credits.status === 'fulfilled' ? credits.value : null;
+	// A retired key whose grant is gone needs nothing more; one Aleph could not
+	// be asked about stays in the list.
+	const keep = retired.filter(
+		(_, i) => stillAllowed[i].status !== 'fulfilled' || stillAllowed[i].value === true
+	);
+	if (keep.length !== retired.length) await keepRetired(settings, keep);
+	app.backup.retired = keep.map((entry) => entry.address);
 }
 
 /** @param {string} address the paying account's */
@@ -544,8 +592,13 @@ export async function restoreFromBackup(ownerAddress) {
 				unreachable === stores.length ? t('restore.unreachable') : t('restore.noSlot')
 			);
 		}
-		const placed = installBooksVault(picked.vault);
-		if (placed.installed) installed = placed.id;
+		// The vault comes along only into a browser without books for this
+		// passkey; where it has them, they open as they are, and the backup —
+		// perhaps from before a passkey was removed — opens with its own key.
+		if (!(await booksHereFor(credential.rawCredentialId)).slot) {
+			const placed = installBooksVault(picked.vault);
+			if (placed.installed) installed = placed.id;
+		}
 
 		app.restore.step = 'unlocking';
 		await unlockWith(credential);
@@ -553,7 +606,9 @@ export async function restoreFromBackup(ownerAddress) {
 		installed = null; // the books are open: the vault stays
 
 		app.restore.step = 'restoring';
-		const restored = await /** @type {Session} */ (session).restoreBackup(picked.bytes);
+		const opened = /** @type {Session} */ (session);
+		const { backupKey } = await valuesOfVault(picked.vault, opened.vault.slot);
+		const restored = await opened.restoreBackup(picked.bytes, { backupKey });
 		watchStore();
 		// The backup the books came back from: in the list, as if made here, so
 		// Einstellungen → Sicherung names it. It cannot carry its own record.
@@ -634,6 +689,7 @@ export async function lock() {
 		granted: null,
 		credits: null,
 		history: [],
+		retired: [],
 		step: '',
 		progress: null,
 		error: null,

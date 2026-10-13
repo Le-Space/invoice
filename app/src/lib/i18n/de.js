@@ -132,7 +132,7 @@ export default {
 		unnamed: 'In diesem Browser nicht hinterlegt',
 		remove: 'Entfernen',
 		removeHint:
-			'Ein entfernter Schlüssel öffnet die Bücher in diesem Browser nicht mehr. Sicherungen aus der Zeit davor öffnet er aber weiter, und mit dem Dateischlüssel darin auch spätere; was er schon geöffnet hat, kennt er ohnehin. Gegen einen gestohlenen Schlüssel hilft nur ein erneuter Umzug.',
+			'Entfernen erneuert den Tresor: neue Tresor-, Datei- und Sicherungsschlüssel und ein neues Fach für jeden Schlüssel, der bleibt; jeder weitere wird dabei einmal gefragt. Neue Sicherungen öffnet der entfernte Schlüssel dann nicht mehr. Ältere Sicherungen öffnet er weiter, und was er schon geöffnet hat, kennt er; gegen einen gestohlenen Schlüssel hilft nur ein erneuter Umzug.',
 		addLabel: 'Name für den neuen Schlüssel',
 		addPlaceholder: 'z. B. YubiKey Schublade',
 		add: 'Zweiten Schlüssel hinzufügen',
@@ -140,7 +140,10 @@ export default {
 		addHint:
 			'Der neue Schlüssel wird zweimal gefragt: einmal zum Anlegen, einmal für sein Fach im Tresor. Danach neu sichern: Eine Sicherung öffnen nur die Schlüssel, die beim Sichern eingetragen waren.',
 		adding: 'Bitte den neuen Schlüssel bestätigen …',
-		removing: 'Wird entfernt …',
+		removing: 'Wird entfernt, der Tresor wird erneuert …',
+		confirming: 'Bitte „{key}“ bestätigen: Er bekommt ein Fach im erneuerten Tresor …',
+		cannotAsk:
+			'Ein Schlüssel, der bleibt, ist in diesem Browser nicht hinterlegt und kann hier nicht gefragt werden; ohne ihn wird nichts erneuert. Sperre die Bücher, entsperre einmal mit ihm über „Passkey wiederherstellen“ und entferne dann.',
 		notCurrent:
 			'Mit diesem Schlüssel ist gerade entsperrt. Entsperre mit einem anderen, um ihn zu entfernen.',
 		defaultLabel: 'Zweiter Schlüssel',
@@ -162,6 +165,8 @@ export default {
 		notGranted:
 			'Das Konto hat diesen Schlüssel noch nicht freigegeben. Einmal, im Ordner von belege:',
 		grantUnknown: 'Ob das Konto diesen Schlüssel freigegeben hat, war gerade nicht zu erfahren.',
+		retired:
+			'Der Sicherungsschlüssel {address} gehörte zum Tresor vor dem Entfernen eines Schlüssels und darf noch auf Kosten des Kontos sichern. Nimm die Freigabe zurück, im Ordner von belege:',
 		check: 'Erneut prüfen',
 		credits: 'Guthaben des Kontos',
 		creditsValue: '{credits} Credits',
