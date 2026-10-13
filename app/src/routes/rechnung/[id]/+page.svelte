@@ -389,8 +389,7 @@
 					class={input}
 					rows="3"
 					bind:value={draft.customer.address}
-					data-testid="customer-address"
-				></textarea></label
+					data-testid="customer-address"></textarea></label
 			>
 		</fieldset>
 

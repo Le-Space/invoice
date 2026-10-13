@@ -86,8 +86,7 @@
 					class={input}
 					rows="3"
 					bind:value={form.issuer.address}
-					data-testid="issuer-address"
-				></textarea></label
+					data-testid="issuer-address"></textarea></label
 			>
 			<label class="text-sm"
 				><span class={label}>{t('invoice.app.settings.taxNumber')}</span>
