@@ -32,7 +32,9 @@ The books sign as that identity, and it is the root of every collection's access
 
 ## A second key
 
-Under Einstellungen → Schlüssel, a second passkey — a YubiKey, say — gets a slot of its own. A key can be removed, but never the last one and never the one in use. A removed key opens nothing in this browser any more.
+Under Einstellungen → Schlüssel, a second passkey — a YubiKey, say — gets a slot of its own. A key can be removed, but never the last one and never the one in use; a key this browser does not keep, as a lost one usually is, can be removed too. A removed key opens nothing in this browser any more.
+
+Removing a key renews the vault: a new vault key, file key and backup key, with a slot for every key that stays. Every key that stays, other than the one in use, is asked once, and the paying account has to allow the new backup key ([backup.md](backup.md#removing-a-key)).
 
 ## Backup and restore
 
@@ -46,7 +48,7 @@ Under Einstellungen → Sicherung the books go to Aleph Cloud as one sealed file
   The newest backup with a slot for that passkey comes back, merged into the books.
 
 - **A passkey without books here:** the app asks before it starts empty ones.
-- **A removed key** still opens the backups made before it was removed.
+- **A removed key** opens no new backup, but still the ones made before.
 
 Everything about it: [backup.md](backup.md).
 

@@ -15,7 +15,7 @@ This repository continues the invoice chapter `invoice01` of [Le-Space/simple-to
   - the PDF with a GiroCode or a payment code;
   - a Storno;
   - the VAT in euros on an invoice in another currency.
-- **Passkeys:** a passkey opens the books. A second key, a YubiKey say, gets a slot of its own in the books' vault, and a key can be removed again.
+- **Passkeys:** a passkey opens the books. A second key, a YubiKey say, gets a slot of its own in the books' vault, and a key can be removed again, which renews the vault.
 - **Backup:** a backup of the books on Aleph Cloud, made from the browser. On an empty device the books come back with the paying account's address and a passkey that was registered when the backup was made.
 - **Connections:** the UCEP `invoice` extension for paired apps:
   - Eigenbelege;

@@ -1,7 +1,12 @@
 // The books' vault: the first unlock keeps what the passkey derives today, every
 // later one reads it back, and a second passkey with a slot gets the same books.
 import { describe, expect, it } from 'vitest';
-import { addSlot, deriveAesKey, slotIdFor } from '@le-space/orbitdb-identity-provider-webauthn-did';
+import {
+	addSlot,
+	deriveAesKey,
+	replacePayload,
+	slotIdFor
+} from '@le-space/orbitdb-identity-provider-webauthn-did';
 
 import {
 	RemovedPasskeyError,
@@ -16,9 +21,10 @@ import {
 	ensureBooksSecret,
 	installBooksVault,
 	openBooksVault,
-	removeBooksSlot,
+	renewBooksVault,
 	uninstallBooksVault,
 	updateBooksVault,
+	valuesOfVault,
 	vaultHasSlotFor
 } from './books-vault.js';
 import { isAlephKey } from './aleph-key.js';
@@ -275,20 +281,135 @@ describe('books vault', () => {
 		const viaB = await openBooksVault({ ...b, storage });
 		expect(hex(viaB.values.dbKey)).toBe(hex(opened.values.dbKey));
 
-		const withoutA = await removeBooksSlot(viaB, a.rawCredentialId, storage);
+		const withoutA = await renewBooksVault(
+			viaB,
+			{ remove: await slotIdFor(a.rawCredentialId) },
+			storage
+		);
 		expect(booksSlotIds(withoutA)).toEqual([await slotIdFor(b.rawCredentialId)]);
 		await expect(openBooksVault({ ...a, storage })).rejects.toBeInstanceOf(RemovedPasskeyError);
 		expect(JSON.parse(/** @type {string} */ (storage.getItem(VAULTS_STORAGE_KEY)))).toHaveLength(1);
 
 		// The last one stays.
-		await expect(removeBooksSlot(withoutA, b.rawCredentialId, storage)).rejects.toMatchObject({
-			code: 'VAULT_LAST_SLOT'
-		});
+		await expect(
+			renewBooksVault(withoutA, { remove: await slotIdFor(b.rawCredentialId) }, storage)
+		).rejects.toMatchObject({ code: 'VAULT_LAST_SLOT' });
 
 		// Added again, A opens the same books again.
 		await addBooksSlot(await openBooksVault({ ...b, storage }), a, storage);
 		const backA = await openBooksVault({ ...a, storage });
 		expect(hex(backA.values.dbKey)).toBe(hex(opened.values.dbKey));
+	});
+
+	it('removing a passkey renews the vault: a new vault key and backup keys, a slot for each one that stays', async () => {
+		const storage = memoryStorage();
+		const [a, b, c] = [passkey(), passkey(), passkey()];
+		let opened = await ensureBackupKeys(
+			await ensureBooksSecret(await openBooksVault({ ...a, storage }), storage),
+			storage
+		);
+		opened = await addBooksSlot(await addBooksSlot(opened, b, storage), c, storage);
+		const before = JSON.parse(JSON.stringify(opened.vault));
+		const viaA = await openBooksVault({ ...a, storage });
+
+		const renewed = await renewBooksVault(
+			viaA,
+			{ remove: await slotIdFor(c.rawCredentialId), others: [b] },
+			storage
+		);
+		// A new vault: its own id and key, a slot for A and B, none for C. The
+		// old vault key, which C knew, does not open it.
+		expect(renewed.vault.id).not.toBe(before.id);
+		expect(hex(renewed.vaultKey)).not.toBe(hex(viaA.vaultKey));
+		await expect(
+			replacePayload(renewed.vault, viaA.vaultKey, new Uint8Array(1))
+		).rejects.toMatchObject({ code: 'VAULT_LOCKED' });
+		expect(booksSlotIds(renewed)).toEqual([
+			await slotIdFor(a.rawCredentialId),
+			await slotIdFor(b.rawCredentialId)
+		]);
+		// The books stay; what a backup is sealed and kept with is new.
+		for (const value of /** @type {const} */ (['dbKey', 'peerSeed', 'booksSecret'])) {
+			expect(hex(/** @type {Uint8Array} */ (renewed.values[value]))).toBe(
+				hex(/** @type {Uint8Array} */ (viaA.values[value]))
+			);
+		}
+		expect(renewed.values.names).toEqual(viaA.values.names);
+		expect(hex(/** @type {Uint8Array} */ (renewed.values.backupKey))).not.toBe(
+			hex(/** @type {Uint8Array} */ (viaA.values.backupKey))
+		);
+		expect(hex(/** @type {Uint8Array} */ (renewed.values.alephKey))).not.toBe(
+			hex(/** @type {Uint8Array} */ (viaA.values.alephKey))
+		);
+		expect(isAlephKey(renewed.values.alephKey)).toBe(true);
+		expect(JSON.parse(/** @type {string} */ (storage.getItem(VAULTS_STORAGE_KEY)))).toEqual([
+			renewed.vault
+		]);
+
+		// B opens the new vault here, C nothing.
+		const viaB = await openBooksVault({ ...b, storage });
+		expect(hex(/** @type {Uint8Array} */ (viaB.values.backupKey))).toBe(
+			hex(/** @type {Uint8Array} */ (renewed.values.backupKey))
+		);
+		await expect(openBooksVault({ ...c, storage })).rejects.toBeInstanceOf(RemovedPasskeyError);
+
+		// What C has seen stays seen: the old record, as an older backup carries
+		// it, still opens with C — and the new one does not.
+		const slotOf = async (/** @type {ReturnType<typeof passkey>} */ p) => ({
+			slotKey: await deriveAesKey(p.prfOutput, VAULT_SLOT_INFO),
+			rawCredentialId: p.rawCredentialId
+		});
+		const old = await valuesOfVault(before, await slotOf(c));
+		expect(hex(/** @type {Uint8Array} */ (old.backupKey))).toBe(
+			hex(/** @type {Uint8Array} */ (viaA.values.backupKey))
+		);
+		await expect(valuesOfVault(renewed.vault, await slotOf(c))).rejects.toMatchObject({
+			code: 'VAULT_NO_SLOT'
+		});
+		// A opens the old record too, with the slot key it unlocked with.
+		const oldViaA = await valuesOfVault(before, renewed.slot);
+		expect(hex(/** @type {Uint8Array} */ (oldViaA.backupKey))).toBe(
+			hex(/** @type {Uint8Array} */ (viaA.values.backupKey))
+		);
+	});
+
+	it('every passkey that stays has to answer, and answer right; otherwise nothing changes', async () => {
+		const storage = memoryStorage();
+		const [a, b, c] = [passkey(), passkey(), passkey()];
+		const opened = await ensureBackupKeys(
+			await ensureBooksSecret(await openBooksVault({ ...a, storage }), storage),
+			storage
+		);
+		await addBooksSlot(await addBooksSlot(opened, b, storage), c, storage);
+		const viaA = await openBooksVault({ ...a, storage });
+		const kept = storage.getItem(VAULTS_STORAGE_KEY);
+		const removeC = await slotIdFor(c.rawCredentialId);
+
+		// B did not answer.
+		await expect(renewBooksVault(viaA, { remove: removeC }, storage)).rejects.toThrow(
+			/did not answer/
+		);
+		// B answered with another PRF output: its slot would never open.
+		await expect(
+			renewBooksVault(
+				viaA,
+				{ remove: removeC, others: [{ ...b, prfOutput: passkey().prfOutput }] },
+				storage
+			)
+		).rejects.toMatchObject({ code: 'VAULT_LOCKED' });
+		// The one that opened it, and one that has no slot, are not removed.
+		await expect(
+			renewBooksVault(viaA, { remove: await slotIdFor(a.rawCredentialId), others: [b, c] }, storage)
+		).rejects.toMatchObject({ code: 'VAULT_LAST_SLOT' });
+		await expect(
+			renewBooksVault(
+				viaA,
+				{ remove: await slotIdFor(passkey().rawCredentialId), others: [b] },
+				storage
+			)
+		).rejects.toMatchObject({ code: 'VAULT_NO_SLOT' });
+		expect(storage.getItem(VAULTS_STORAGE_KEY)).toBe(kept);
+		expect((await openBooksVault({ ...c, storage })).created).toBe(false);
 	});
 
 	it('a vault from a backup goes into an empty browser, and its passkeys open the books there', async () => {
@@ -362,7 +483,7 @@ describe('books vault', () => {
 		// A passkey removed here is reported as removed, not as having no books.
 		const b = passkey();
 		const withB = await addBooksSlot(ours, b, here);
-		await removeBooksSlot(withB, b.rawCredentialId, here);
+		await renewBooksVault(withB, { remove: await slotIdFor(b.rawCredentialId) }, here);
 		expect(await booksHereFor(b.rawCredentialId, here)).toEqual({ slot: false, removed: true });
 	});
 });

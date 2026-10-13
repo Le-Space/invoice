@@ -53,13 +53,28 @@ Three prompts in all. If no backup has a slot for the passkey, the page says so 
 
 ## Removing a key
 
-Removing a key takes its slot out of the vault here, and so out of every backup made afterwards. It does not reach the backups made before:
+_Einstellungen → Schlüssel → "Entfernen"_, also for a key this browser does not keep, as a lost one usually is. Removing a key renews the vault:
 
-- they still carry the key's slot, and the key opens them;
+- **New keys.** The vault gets a new vault key, a new file key (`backupKey`) and a new backup key (`alephKey`). The removed key knew the old vault key, and every backup carries the vault in front, so a new file key under the old vault key would be no secret to it.
+- **A slot for every key that stays.** The key that unlocked the books needs no prompt. Every other key that stays is asked once (one touch). A key that stays but is not kept in this browser cannot be asked, and nothing changes: unlock once with it ("Passkey wiederherstellen"), then remove.
+- **A new grant.** The new backup key has a new address, which the paying account has not allowed yet. _Einstellungen → Sicherung_ shows the command for it, and the command that takes the old key's grant back:
+
+  ```sh
+  pnpm setup:aleph -- --authorize <new address> --channel INVOICE-BACKUP
+  pnpm setup:aleph -- --revoke <old address>
+  ```
+
+  Until the old grant is taken back, the removed key can still have files kept at the account's expense on `INVOICE-BACKUP`. The page names the old address until the account no longer allows it.
+
+What removing does not reach:
+
+- the backups made before it still carry the removed key's slot, and it opens them;
 - anyone who knows the paying account can fetch them;
-- what the key finds there includes the file key, which removing does not renew, so with one such backup it can read later backup files too.
+- the database key, the database names and the books' identity stay the same.
 
-A lost security key is still protected by its PIN. Against a stolen key with its PIN, removing it is not enough: the books would have to move to new secrets, which the app cannot do yet.
+From then on, the removed key opens no new backup: it has no slot in front of it, and what it knew does not open the file. A lost security key is still protected by its PIN. Against a stolen key with its PIN, removing it is not enough for what it has seen: the books would have to move to new secrets, which the app cannot do yet.
+
+Other browsers that hold a copy of these books keep the old keys. Use one browser for the books; another one gets them from a backup.
 
 ## What leaves this device
 
@@ -79,7 +94,7 @@ A lost security key is still protected by its PIN. Against a stolen key with its
   - The header is the vault record as JSON: version 1, AES-GCM, an id, the sealed payload, and slots with `kid`, `iv` and `ciphertext`.
   - The body is the three collections, block by block (`bundleDatabases`), as one CAR file sealed with AES-GCM under the vault's `backupKey`.
   - The manifest inside names the header's SHA-256, so a changed header is refused.
-- **Keys:** the vault (version 3) holds `backupKey` (AES-GCM) and `alephKey` (secp256k1), 32 random bytes each. They sit next to the database key, the database names, the peer seed and the secret of the books' identity, and are the same for every slot.
+- **Keys:** the vault (version 3) holds `backupKey` (AES-GCM) and `alephKey` (secp256k1), 32 random bytes each. They sit next to the database key, the database names, the peer seed and the secret of the books' identity, and are the same for every slot. Removing a key makes a new vault (`renewBooksVault`: a new id and vault key, new `backupKey` and `alephKey`, a slot for every key that stays). Each slot key is checked against its old slot before anything changes. The addresses of retired Aleph keys stay in the sealed settings (`backup/retired`) until the account no longer allows them.
 - **STORE:**
   - channel `INVOICE-BACKUP`, `content.address` set to the paying account, `payment: { type: "credit" }`;
   - signed with `personal_sign` by the `alephKey`;
@@ -90,7 +105,8 @@ A lost security key is still protected by its PIN. Against a stolen key with its
   3. Each header is read without a key.
   4. The first, newest-first, whose vault has a slot with `kid` = SHA-256 of the passkey's credential id is taken.
 - **Restore:**
-  - The vault is put into this browser unless it would clash: when a vault here for other books already opens with one of its keys, the backup is refused.
+  - The vault is put into this browser only when no vault here has a slot for the passkey; where one has, the books open as they are. The backup is opened with the `backupKey` of the vault in front of it, read with the passkey's slot key, so a backup from before a removal opens too.
+  - A vault that would clash is refused: when a vault here for other books, or an older one of these, already opens with one of its keys.
   - The books open at their own addresses, and `restoreAppBackup` merges and refuses other books.
   - On a failure, the vault put in is taken out again, and a passkey without books here is not kept.
 - **History:** kept in the sealed settings (`backup/history`, the newest 50). Each record carries the slot ids of the vault the backup carries; the page compares them with the slots there are now.

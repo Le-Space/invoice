@@ -59,11 +59,13 @@ export const STORAGE_PATHS = Object.freeze({
  * @property {string} did the DID of the passkey that unlocked: who writes
  * @property {string} booksDid the books' own identity, the root writer of every collection
  * @property {string} credentialId the passkey that unlocked, base64url
- * @property {{ values: any, vault: any, vaultKey: Uint8Array }} vault the books' vault, open:
- *   what adding and removing a passkey works on (books-vault.js)
+ * @property {{ values: any, vault: any, vaultKey: Uint8Array, slot: import('./books-vault.js').VaultSlot }} vault
+ *   the books' vault, open, with the slot key it was opened with: what adding
+ *   and removing a passkey works on (books-vault.js)
  * @property {Awaited<ReturnType<typeof openStore>>} store reopened after a restore: read it from the session each time
- * @property {(bytes: Uint8Array, options?: { onProgress?: (progress: any) => void }) => Promise<{ manifest: any, databases: { collection?: string, joined: number, entries: number | null }[] }>} restoreBackup
- *   put a backup of these books back in, merging (backup.js, Le-Space/invoice#28)
+ * @property {(bytes: Uint8Array, options?: { backupKey?: Uint8Array, onProgress?: (progress: any) => void }) => Promise<{ manifest: any, databases: { collection?: string, joined: number, entries: number | null }[] }>} restoreBackup
+ *   put a backup of these books back in, merging (backup.js, Le-Space/invoice#28);
+ *   `backupKey`: the one the vault in front of that backup holds, when it is older
  * @property {string} identityHash the identity document's hash
  * @property {string} peerId this session's libp2p peer id
  * @property {Uint8Array} ucepSeed the seed of the UCEP node's peer key, from the books' vault
@@ -199,23 +201,31 @@ export async function startSession(credential) {
 							peerKey: peerKey.raw,
 							ucepSeed,
 							booksSecret: /** @type {Uint8Array} */ (values.booksSecret),
-							backupKey: /** @type {Uint8Array} */ (values.backupKey),
-							alephKey: /** @type {Uint8Array} */ (values.alephKey)
+							// Read when asked: removing a passkey renews them.
+							get backupKey() {
+								return /** @type {Uint8Array} */ (session.vault.values.backupKey);
+							},
+							get alephKey() {
+								return /** @type {Uint8Array} */ (session.vault.values.alephKey);
+							}
 						}
 					}
 				: {}),
 			/**
-			 * A backup of these books, put back in: opened with the vault's backup
-			 * key, every block back into the blockstore, every collection rejoined
-			 * at its address. Merging — what is here stays, nothing is deleted;
-			 * a backup of other books is refused. The store is closed and opened
-			 * again around it.
+			 * A backup of these books, put back in: opened with its backup key —
+			 * the vault's, or, for a backup made before a passkey was removed,
+			 * the one the older vault in front of it holds — every block back
+			 * into the blockstore, every collection rejoined at its address.
+			 * Merging — what is here stays, nothing is deleted; a backup of other
+			 * books is refused. The store is closed and opened again around it.
 			 */
-			async restoreBackup(bytes, { onProgress } = {}) {
+			async restoreBackup(bytes, { backupKey, onProgress } = {}) {
 				const { openAppBackup, restoreAppBackup } = await import(
 					'@le-space/orbitdb-storage-bridge/app-backup'
 				);
-				const { decrypt } = await backupCipher(/** @type {Uint8Array} */ (values.backupKey));
+				const { decrypt } = await backupCipher(
+					/** @type {Uint8Array} */ (backupKey ?? session.vault.values.backupKey)
+				);
 				const backup = await openAppBackup(bytes, { decrypt, app: 'invoice' });
 				const addresses = Object.fromEntries(
 					Object.entries(session.store.databases()).map(([name, db]) => [

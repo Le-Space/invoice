@@ -38,6 +38,12 @@ export const BACKUP_OWNER_SETTING = 'backup/owner';
 export const BACKUPS_SETTING = 'backup/history';
 /** The newest this many are kept in the list; older backups stay where they are. */
 export const KEEP = 50;
+/**
+ * The settings record with the addresses of Aleph keys a removed passkey knew
+ * (books-vault.js `renewBooksVault`): kept until the paying account no longer
+ * allows them.
+ */
+export const RETIRED_SETTING = 'backup/retired';
 
 /** In E2E builds only: where a fake Aleph runs, set by the test. */
 export const E2E_ALEPH_URL_KEY = 'invoice.e2e.alephUrl';
@@ -127,6 +133,41 @@ export function backupCoverage(record, keys) {
 		misses: keys.filter((key) => !slots.has(key.kid)),
 		gone: record.slots.filter((kid) => !now.has(kid)).length
 	};
+}
+
+/** @param {any} settings @returns {Promise<{ address: string, at: string }[]>} */
+export async function loadRetired(settings) {
+	const list = await getSetting(settings, RETIRED_SETTING);
+	return Array.isArray(list)
+		? list.filter((entry) => isAddress(entry?.address) && typeof entry?.at === 'string')
+		: [];
+}
+
+/**
+ * Remember an Aleph key's address that a removed passkey knew, so the page
+ * asks for its grant to be taken back.
+ *
+ * @param {any} settings
+ * @param {string} address
+ * @param {Date} [at]
+ */
+export async function retireAddress(settings, address, at = new Date()) {
+	const list = await loadRetired(settings);
+	if (list.some((entry) => entry.address === address)) return list;
+	const next = [...list, { address, at: at.toISOString() }];
+	await setSetting(settings, RETIRED_SETTING, next);
+	return next;
+}
+
+/**
+ * Forget the retired addresses the paying account no longer allows.
+ *
+ * @param {any} settings
+ * @param {{ address: string, at: string }[]} list the ones still allowed
+ */
+export async function keepRetired(settings, list) {
+	await setSetting(settings, RETIRED_SETTING, list);
+	return list;
 }
 
 /** @param {any} settings @returns {Promise<string | null>} */

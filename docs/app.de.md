@@ -32,7 +32,9 @@ Die Bücher unterschreiben als diese Identität, und sie ist die Wurzel der Zugr
 
 ## Ein zweiter Schlüssel
 
-Unter Einstellungen → Schlüssel bekommt ein zweiter Passkey ein eigenes Fach, etwa ein YubiKey. Ein Schlüssel lässt sich entfernen, aber nie der letzte und nie der, mit dem gerade entsperrt ist. Ein entfernter Schlüssel öffnet in diesem Browser nichts mehr.
+Unter Einstellungen → Schlüssel bekommt ein zweiter Passkey ein eigenes Fach, etwa ein YubiKey. Ein Schlüssel lässt sich entfernen, aber nie der letzte und nie der, mit dem gerade entsperrt ist; auch einer, den dieser Browser nicht hinterlegt hat, wie meist ein verlorener. Ein entfernter Schlüssel öffnet in diesem Browser nichts mehr.
+
+Entfernen erneuert den Tresor: neue Tresor-, Datei- und Sicherungsschlüssel und ein Fach für jeden Schlüssel, der bleibt. Jeder, der bleibt, außer dem, mit dem entsperrt ist, wird einmal gefragt, und das zahlende Konto muss den neuen Sicherungsschlüssel freigeben ([backup.de.md](backup.de.md#einen-schlüssel-entfernen)).
 
 ## Sicherung und Wiederherstellen
 
@@ -46,7 +48,7 @@ Unter Einstellungen → Sicherung gehen die Bücher als eine versiegelte Datei m
   Die neueste Sicherung mit einem Fach für diesen Passkey kommt zurück und wird mit den Büchern zusammengeführt.
 
 - **Ein Passkey ohne Bücher hier:** Die App fragt, bevor sie leere Bücher anlegt.
-- **Ein entfernter Schlüssel** öffnet weiterhin die Sicherungen von vor seinem Entfernen.
+- **Ein entfernter Schlüssel** öffnet keine neue Sicherung mehr, die von vor seinem Entfernen aber weiter.
 
 Alles dazu: [backup.de.md](backup.de.md).
 
