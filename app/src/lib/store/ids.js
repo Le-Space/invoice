@@ -11,7 +11,7 @@ const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 /**
  * @param {number} [now] milliseconds since the epoch
- * @param {(bytes: Uint8Array) => Uint8Array} [random]
+ * @param {(bytes: Uint8Array<ArrayBuffer>) => Uint8Array} [random]
  * @returns {string} 26 characters
  */
 export function ulid(now = Date.now(), random = (b) => crypto.getRandomValues(b)) {

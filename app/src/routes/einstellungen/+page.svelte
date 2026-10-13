@@ -1,11 +1,11 @@
 <script>
 	import { UNIT_MAX_LENGTH, circleOf, normaliseUnits } from '@le-space/invoice/settings';
 	import { payToAddress } from '@le-space/invoice/payment-code';
-	import { t } from '$lib/i18n/index.js';
-	import { app, currentStore } from '$lib/session.svelte.js';
-	import { saveSettings } from '$lib/invoices.js';
-	import KeysSection from '$lib/KeysSection.svelte';
-	import BackupSection from '$lib/BackupSection.svelte';
+	import { t } from '#lib/i18n/index.js';
+	import { app, currentStore } from '#lib/session.svelte.js';
+	import { saveSettings } from '#lib/invoices.js';
+	import KeysSection from '#lib/KeysSection.svelte';
+	import BackupSection from '#lib/BackupSection.svelte';
 
 	/** A copy of the settings, written back on "Speichern". @type {any} */
 	let form = $state(null);

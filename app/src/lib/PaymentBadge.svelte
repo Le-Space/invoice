@@ -2,8 +2,8 @@
 	// How an issued invoice stands: bezahlt (with the day), teilweise bezahlt,
 	// offen or überfällig — from the payments a paired app reported.
 	import { formatDay } from '@le-space/invoice/document';
-	import { t } from '$lib/i18n/index.js';
-	import { paymentOf, today } from '$lib/invoices.js';
+	import { t } from '#lib/i18n/index.js';
+	import { paymentOf, today } from '#lib/invoices.js';
 
 	/** @type {{ invoice: any }} */
 	let { invoice } = $props();

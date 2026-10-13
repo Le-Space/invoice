@@ -24,11 +24,11 @@
 		eigenbelegPdfBytes,
 		eigenbelegRows
 	} from '@le-space/invoice/eigenbeleg-pdf';
-	import { t } from '$lib/i18n/index.js';
-	import { app, currentStore } from '$lib/session.svelte.js';
-	import { draftCancellation, issueDraft, paymentOf, saveDraft, today } from '$lib/invoices.js';
+	import { t } from '#lib/i18n/index.js';
+	import { app, currentStore } from '#lib/session.svelte.js';
+	import { draftCancellation, issueDraft, paymentOf, saveDraft, today } from '#lib/invoices.js';
 	import { dueOn } from '@le-space/invoice/payments';
-	import PaymentBadge from '$lib/PaymentBadge.svelte';
+	import PaymentBadge from '#lib/PaymentBadge.svelte';
 
 	let id = $derived(page.params.id);
 	let stored = $derived(app.invoices.find((invoice) => invoice.id === id) ?? null);

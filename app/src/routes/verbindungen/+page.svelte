@@ -3,10 +3,10 @@
 	// QR code or to copy, or a short window in which an app may ask in-band —
 	// then the same six digits on both screens, and this human says yes.
 	import { renderSVG } from 'uqr';
-	import { list, t } from '$lib/i18n/index.js';
-	import { app, currentProvider, currentUcep, startUcep } from '$lib/session.svelte.js';
-	import { invitationAddrs } from '$lib/ucep/net.js';
-	import { SCOPE_TEXT } from '$lib/ucep/scopes.js';
+	import { list, t } from '#lib/i18n/index.js';
+	import { app, currentProvider, currentUcep, startUcep } from '#lib/session.svelte.js';
+	import { invitationAddrs } from '#lib/ucep/net.js';
+	import { SCOPE_TEXT } from '#lib/ucep/scopes.js';
 
 	// Every scope is offered unless the human unticks it: Belege asks for all
 	// of them, and an invitation that lacks one it asks for is refused.

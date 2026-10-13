@@ -5,10 +5,10 @@
 	import { formatMoney } from '@le-space/invoice/money';
 	import { formatDay } from '@le-space/invoice/document';
 	import { isEigenbeleg } from '@le-space/invoice/eigenbeleg';
-	import { t } from '$lib/i18n/index.js';
-	import { app, currentStore } from '$lib/session.svelte.js';
-	import { createDraft } from '$lib/invoices.js';
-	import PaymentBadge from '$lib/PaymentBadge.svelte';
+	import { t } from '#lib/i18n/index.js';
+	import { app, currentStore } from '#lib/session.svelte.js';
+	import { createDraft } from '#lib/invoices.js';
+	import PaymentBadge from '#lib/PaymentBadge.svelte';
 
 	let templateId = $state('');
 	let busy = $state(false);

@@ -6,7 +6,6 @@ import js from '@eslint/js';
 import svelte from 'eslint-plugin-svelte';
 import globals from 'globals';
 import { fileURLToPath } from 'node:url';
-import svelteConfig from './svelte.config.js';
 
 const gitignorePath = fileURLToPath(new URL('./.gitignore', import.meta.url));
 
@@ -26,12 +25,6 @@ export default [
 				__BUILD_DATE__: 'readonly',
 				__BUILD_RELEASE__: 'readonly'
 			}
-		}
-	},
-	{
-		files: ['**/*.svelte', '**/*.svelte.js'],
-		languageOptions: {
-			parserOptions: { svelteConfig }
 		}
 	}
 ];
