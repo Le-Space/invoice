@@ -57,4 +57,4 @@ pnpm app:e2e       # the app in a browser, with a virtual passkey
 
 ## License
 
-MIT, see [LICENSE](LICENSE). The embedded DejaVu font keeps its own licence.
+MIT, see [LICENSE](LICENSE). The embedded DejaVu font (src/core/fonts/) keeps its own licence, see [src/core/fonts/LICENSE.dejavu](src/core/fonts/LICENSE.dejavu).
