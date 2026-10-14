@@ -49,16 +49,22 @@ export const RELAY_REGISTRATION = Object.freeze({
 	registrationId: 'relay:orbitdb-relay:orbitdb-relay'
 });
 export const TRUSTED_RELAY_SENDERS = Object.freeze([
-	'0xc1B96D694a6A7CBae0cEab5116fF996b2547479b',
+	// The orbitdb-relay VM deployed on 2026-10-14 (NiKrause/orbitdb-relay#60,
+	// 0.10.10). A guest publishes with a key made at deploy time, so every
+	// redeploy means a new wallet here — and until it lands, no relay.
+	'0x50c78C0286D1d6b465Ab96ac3313b1985854b38C',
+	// The second Le-Space relay (job-blanket-biology-typical).
 	'0x28BbF08A50eB88253cDc25Fe36eE345Dd7937cC6'
 ]);
 
 /**
- * The relays as they were registered on 2026-09-28, for when Aleph cannot be
+ * The relays as they were registered on 2026-10-14, for when Aleph cannot be
  * asked. A relay moves when it is redeployed; the lookup is what keeps up.
+ * The relay registered on 2026-09-28 (improve-empty-grass-tent) was forgotten
+ * by the redeploy of 2026-10-14 and answers no more.
  */
 export const FALLBACK_RELAYS = Object.freeze([
-	'/dns4/improve-empty-grass-tent.2n6.me/tcp/443/tls/ws/p2p/12D3KooWL9UKRwGWE6GGxANhDZpJNyDphQcfBSApuXE1qTW5pkVh',
+	'/dns4/exhaust-tobacco-abuse-purchase.2n6.me/tcp/443/tls/ws/p2p/12D3KooWC9tUS4mSjada8VN4AvAfv4gpgGutnsVFtS6a3Y1mjjSq',
 	'/dns4/job-blanket-biology-typical.2n6.me/tcp/443/tls/ws/p2p/12D3KooWSEfBQ6yJ19ebpoWvx1T5yWL3UtjkN1muJJ4djyTfPtsZ'
 ]);
 
