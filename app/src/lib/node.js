@@ -220,9 +220,8 @@ export async function startSession(credential) {
 			 * books is refused. The store is closed and opened again around it.
 			 */
 			async restoreBackup(bytes, { backupKey, onProgress } = {}) {
-				const { openAppBackup, restoreAppBackup } = await import(
-					'@le-space/orbitdb-storage-bridge/app-backup'
-				);
+				const { openAppBackup, restoreAppBackup } =
+					await import('@le-space/orbitdb-storage-bridge/app-backup');
 				const { decrypt } = await backupCipher(
 					/** @type {Uint8Array} */ (backupKey ?? session.vault.values.backupKey)
 				);

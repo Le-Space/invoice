@@ -205,9 +205,8 @@ export async function backupAddressOf(alephKey) {
  * @returns {Promise<boolean>}
  */
 export async function isGranted({ owner, address, endpoints = alephEndpoints(), fetch: f }) {
-	const { createAlephAuthorizer } = await import(
-		'@le-space/orbitdb-storage-bridge/backends/aleph-pin'
-	);
+	const { createAlephAuthorizer } =
+		await import('@le-space/orbitdb-storage-bridge/backends/aleph-pin');
 	const authorizer = createAlephAuthorizer({
 		owner,
 		// Only read here; the account's key is belege's bridge's, never this page's.
