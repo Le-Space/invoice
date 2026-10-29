@@ -7,12 +7,14 @@ _Deutsch: [app.de.md](app.de.md)_
 - **Rechnungen:**
   - a list and a draft editor (customer, dates, tax mode, currency and network, the euro rate for the VAT, lines);
   - issuing with the next number of this passkey's circle;
-  - the PDF and a Storno.
+  - the PDF and a Storno;
+  - for a customer who gets one, an XRechnung beside the PDF ([e-invoices.md](e-invoices.md)).
 
   A new invoice can start from a chain template (NYM, AKT, BTC, ETH, USDC on Base).
 
 - **Einstellungen:**
   - the issuer and the bank;
+  - the contact person, post code, city and country an XRechnung needs;
   - the crypto addresses, checked for their network;
   - the units offered for lines;
   - the default tax mode and payment terms;

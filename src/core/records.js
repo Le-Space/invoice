@@ -24,6 +24,7 @@ import { INVOICE_CURRENCIES, VAT_CURRENCY, currencyOf } from './currency.js';
 import { computeTotals, inEuroCents, parseRate, toUnits } from './money.js';
 import { CURRENCY_NETWORKS, defaultNetwork, paysOn } from './networks.js';
 import { PAY_TO, cryptoShown, payToAddress } from './payment-code.js';
+import { wantsXRechnung, xrechnungProblems } from './xrechnung-rules.js';
 
 /**
  * Integer division rounding half away from zero, for rescaling a price.
@@ -65,7 +66,18 @@ export const INVOICE_PREFIX = 'invoice/';
  * business migrating from another program brings one, a one-off customer has
  * none, and the document prints it only where it is there.
  *
- * @typedef {{ name: string, address: string, vatId?: string, number?: string }} Recipient
+ * `eInvoice` is the format the customer gets: `pdf`, or `xrechnung` for the
+ * PDF and an XRechnung beside it. An XRechnung needs what the PDF does not:
+ * the buyer reference (BT-10, a Leitweg-ID for a public body), an e-mail
+ * address (BT-49), and the post code, city and country (ISO 3166-1) on their
+ * own, beside the address block the PDF prints (`xrechnung-rules.js`).
+ *
+ * @typedef {{
+ *   name: string, address: string, vatId?: string, number?: string,
+ *   email?: string, buyerReference?: string,
+ *   postcode?: string, city?: string, country?: string,
+ *   eInvoice?: 'pdf' | 'xrechnung'
+ * }} Recipient
  */
 /**
  * A line as it is charged, and as it is explained.
@@ -172,6 +184,12 @@ export function emptyDraft({ taxMode = 'standard', currency = 'EUR', customer, i
 			name: '',
 			address: '',
 			vatId: '',
+			email: '',
+			buyerReference: '',
+			postcode: '',
+			city: '',
+			country: '',
+			eInvoice: 'pdf',
 			...customer
 		}),
 		lines: [emptyLine()],
@@ -300,6 +318,9 @@ export function draftProblems(draft, { issuer } = {}) {
 	) {
 		problems.push({ code: 'invoice.problem.network', field: 'network' });
 	}
+	// An invoice that goes out as an XRechnung is checked for what KoSIT would
+	// reject it for, before it gets a number (xrechnung-rules.js).
+	if (wantsXRechnung(draft)) problems.push(...xrechnungProblems(draft, { issuer }));
 
 	return problems;
 }

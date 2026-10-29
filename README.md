@@ -17,12 +17,13 @@ This repository continues the invoice chapter `invoice01` of [Le-Space/simple-to
   - the VAT in euros on an invoice in another currency.
 - **Passkeys:** a passkey opens the books. A second key, a YubiKey say, gets a slot of its own in the books' vault, and a key can be removed again, which renews the vault.
 - **Backup:** a backup of the books on Aleph Cloud, made from the browser. On an empty device the books come back with the paying account's address and a passkey that was registered when the backup was made.
+- **E-invoices:** an XRechnung (CII, EN 16931) beside the PDF, for a customer who gets one. KoSIT's validator checks it in CI, and the app checks the mandatory fields before issuing.
 - **Connections:** the UCEP `invoice` extension for paired apps:
   - Eigenbelege;
   - the issued invoices, with their net, VAT breakdown and the customer's VAT ID;
   - payments reported back.
 
-Not yet: e-invoices, offers, sync between one's own devices. See [docs/roadmap.md](docs/roadmap.md).
+Not yet: ZUGFeRD, offers, sync between one's own devices. See [docs/roadmap.md](docs/roadmap.md).
 
 ## Two rules
 
@@ -37,6 +38,7 @@ Not yet: e-invoices, offers, sync between one's own devices. See [docs/roadmap.m
 | ------------------------------------------------- | ------------------------------------------ | ------------------------------------------------ |
 | The core modules                                  | [docs/core.md](docs/core.md)               | [docs/core.de.md](docs/core.de.md)               |
 | Currencies, crypto invoices, payment codes        | [docs/currencies.md](docs/currencies.md)   | [docs/currencies.de.md](docs/currencies.de.md)   |
+| E-invoices: XRechnung, checked by KoSIT           | [docs/e-invoices.md](docs/e-invoices.md)   | [docs/e-invoices.de.md](docs/e-invoices.de.md)   |
 | The app: pages, passkeys, the vault, a second key | [docs/app.md](docs/app.md)                 | [docs/app.de.md](docs/app.de.md)                 |
 | Backup and restore                                | [docs/backup.md](docs/backup.md)           | [docs/backup.de.md](docs/backup.de.md)           |
 | Connections: the UCEP invoice extension           | [docs/connections.md](docs/connections.md) | [docs/connections.de.md](docs/connections.de.md) |
@@ -53,6 +55,7 @@ pnpm lint
 pnpm app:dev       # the app, on http://localhost:5173
 pnpm app:test      # the app's unit specs
 pnpm app:e2e       # the app in a browser, with a virtual passkey
+pnpm xrechnung:validate   # the XRechnung fixtures through KoSIT (needs Java 11+)
 ```
 
 ## License

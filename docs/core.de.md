@@ -26,5 +26,7 @@ Die App baut auf diesen Modulen auf ([app.de.md](app.de.md)).
 | `eigenbeleg.js`, `eigenbeleg-pdf.js` | Eigenbelege für UCEP `create-eigenbeleg`: geprüfte Angaben, ein eigener Nummernkreis, das PDF                         |
 | `payments.js`                        | Gemeldete Zahlungen zu einer ausgestellten Rechnung (UCEP `record-payment`): nach Referenz, Teilzahlungen, Fälligkeit |
 | `duplicates.js`                      | Eine Nummer auf zwei Rechnungen wird gemeldet, nicht umnummeriert                                                     |
+| `xrechnung-rules.js`                 | Was eine XRechnung braucht, vor dem Ausstellen geprüft: BR-DE-Pflichtangaben, elektronische Adressen                  |
+| `xrechnung.js`                       | Eine ausgestellte Rechnung als XRechnung (UN/CEFACT CII, XRechnung 3.0); ein Storno als Credit Note 381               |
 
 `src/i18n/` – die deutschen und englischen Wörter der gedruckten Rechnung.
