@@ -20,7 +20,7 @@ This repository continues the invoice chapter `invoice01` of [Le-Space/simple-to
 - **E-invoices:** an XRechnung (CII, EN 16931) beside the PDF, for a customer who gets one. KoSIT's validator checks it in CI, and the app checks the mandatory fields before issuing.
 - **Connections:** the UCEP `invoice` extension for paired apps:
   - Eigenbelege;
-  - the issued invoices, with their net, VAT breakdown and the customer's VAT ID;
+  - the issued invoices, with their net, VAT breakdown and the customer's VAT ID, and their PDFs and XRechnungen;
   - payments reported back.
 
 Not yet: ZUGFeRD, offers, sync between one's own devices. See [docs/roadmap.md](docs/roadmap.md).

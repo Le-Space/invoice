@@ -10,7 +10,10 @@ import { identify, identifyPush } from '@libp2p/identify';
 import { createConsumer } from '@le-space/ucep';
 import { t } from '../i18n/index.js';
 import { cancellationFor, emptyDraft, emptyLine, issue } from '@le-space/invoice/records';
+import { emptyIssuer } from '@le-space/invoice/settings';
+import { xrechnungXml } from '@le-space/invoice/xrechnung';
 import {
+	INLINE_XML_LIMIT,
 	SCOPES,
 	createInvoiceProvider,
 	eigenbelegFile,
@@ -127,6 +130,7 @@ describe('the invoice extension, served', () => {
 			'create-eigenbeleg',
 			'status',
 			'get-pdf',
+			'get-xml',
 			'list-issued',
 			'record-payment'
 		]);
@@ -136,6 +140,9 @@ describe('the invoice extension, served', () => {
 		// get-pdf checks its grant itself (two scopes open it), and just as strictly.
 		await expect(
 			stranger.call(providerId, 'invoice', 'get-pdf', { documentId: 'x' })
+		).rejects.toMatchObject({ code: 'PAIRING_REQUIRED' });
+		await expect(
+			stranger.call(providerId, 'invoice', 'get-xml', { documentId: 'x' })
 		).rejects.toMatchObject({ code: 'PAIRING_REQUIRED' });
 	});
 
@@ -319,20 +326,65 @@ describe('the grant store', () => {
 	});
 });
 
+/** What an XRechnung needs beyond the PDF, made up as in scripts/xrechnung-fixtures.js. */
+const XRECHNUNG = {
+	issuer: emptyIssuer({
+		name: 'Wolkenfabrik Hosting UG',
+		address: 'Musterstraße 1\n12345 Musterstadt',
+		postcode: '12345',
+		city: 'Musterstadt',
+		country: 'DE',
+		contactName: 'Erika Mustermann',
+		phone: '+49 30 1234567',
+		email: 'rechnung@example.com',
+		vatId: 'DE123456789',
+		bank: { name: 'Beispielbank', iban: 'DE79 0000 0000 1234 5678 90', bic: '' }
+	}),
+	customer: {
+		postcode: '54321',
+		city: 'Beispielstadt',
+		country: 'DE',
+		email: 'buchhaltung@example.org',
+		buyerReference: 'Bestellung 4711',
+		eInvoice: /** @type {'xrechnung'} */ ('xrechnung')
+	}
+};
+
 /** An issued invoice as the app stores it: the store's id, not the core's `inv_…`. */
-function issued(/** @type {any} */ { number, issueDate, gross, customer = 'Beispiel Kunde GmbH' }) {
+function issued(
+	/** @type {any} */ {
+		number,
+		issueDate,
+		gross,
+		customer = 'Beispiel Kunde GmbH',
+		xrechnung = false,
+		lines = 1
+	}
+) {
 	const draft = {
 		...emptyDraft({
 			taxMode: 'standard',
 			issueDate,
-			customer: { name: customer, address: 'Beispielweg 2\n54321 Beispielstadt' }
+			customer: {
+				name: customer,
+				address: 'Beispielweg 2\n54321 Beispielstadt',
+				...(xrechnung ? XRECHNUNG.customer : {})
+			}
 		}),
-		// 100.00 net + 19 % = 119.00; `gross` scales it.
-		lines: [emptyLine({ description: 'Beratung', unitPrice: String(gross * 100), vatRate: 19 })]
+		// 100.00 net + 19 % = 119.00 a line; `gross` scales it.
+		lines: Array.from({ length: lines }, (_, i) =>
+			emptyLine({
+				description: lines > 1 ? `Beratung ${i + 1}` : 'Beratung',
+				unitPrice: String(gross * 100),
+				vatRate: 19
+			})
+		)
 	};
 	const record = issue(draft, {
 		number,
-		issuer: { name: 'Wolkenfabrik Hosting UG', address: 'Musterstraße 1\n12345 Musterstadt' },
+		issuer: xrechnung
+			? XRECHNUNG.issuer
+			: { name: 'Wolkenfabrik Hosting UG', address: 'Musterstraße 1\n12345 Musterstadt' },
 		issuedBy: 'did:key:z6MkInvoiceProviderSpec',
 		issuedAt: `${issueDate}T09:00:00.000Z`
 	});
@@ -441,6 +493,10 @@ describe('issued invoices and their payments (0.2.0, VAT since 0.3.0)', () => {
 			}
 		);
 		ids.storno = await put(withoutId(storno));
+		// Since 0.4.0: an invoice to a customer who gets an XRechnung.
+		ids.xrechnung = await put(
+			issued({ number: 'RE-2026-0006', issueDate: '2026-09-20', gross: 100, xrechnung: true })
+		);
 		ids.draft = await put(withoutId(emptyDraft({ issueDate: '2026-09-05' })));
 		ids.eigenbeleg = (
 			await books.call(providerId, 'invoice', 'create-eigenbeleg', args)
@@ -459,7 +515,8 @@ describe('issued invoices and their payments (0.2.0, VAT since 0.3.0)', () => {
 			'RE-2026-0002',
 			'RE-2026-0003',
 			'RE-2026-0004',
-			'RE-2026-0005'
+			'RE-2026-0005',
+			'RE-2026-0006'
 		]);
 		const ids_ = all.invoices.map((/** @type {any} */ i) => i.documentId);
 		expect(ids_).not.toContain(ids.draft);
@@ -471,6 +528,8 @@ describe('issued invoices and their payments (0.2.0, VAT since 0.3.0)', () => {
 			issuedOn: '2026-09-01',
 			dueOn: '2026-09-15',
 			customer: { name: 'Beispiel Kunde GmbH' },
+			// Since 0.4.0: which files there are.
+			formats: ['pdf'],
 			total: { value: '119.00', currency: 'EUR' },
 			// Since 0.3.0: the net and the VAT per rate and category.
 			net: { value: '100.00', currency: 'EUR' },
@@ -488,6 +547,10 @@ describe('issued invoices and their payments (0.2.0, VAT since 0.3.0)', () => {
 			vat: [{ rate: '19', category: 'S', amount: { value: '-19.00', currency: 'EUR' } }]
 		});
 		expect(all.invoices[4].dueOn).toBeUndefined();
+		expect(all.invoices[5]).toMatchObject({
+			number: 'RE-2026-0006',
+			formats: ['pdf', 'xrechnung']
+		});
 
 		// Two at a time, from the cursor.
 		const first = await reader.call(providerId, 'invoice', 'list-issued', { limit: 2 });
@@ -508,7 +571,10 @@ describe('issued invoices and their payments (0.2.0, VAT since 0.3.0)', () => {
 			limit: 2,
 			cursor: second.next
 		});
-		expect(last.invoices.map((/** @type {any} */ i) => i.number)).toEqual(['RE-2026-0005']);
+		expect(last.invoices.map((/** @type {any} */ i) => i.number)).toEqual([
+			'RE-2026-0005',
+			'RE-2026-0006'
+		]);
 		expect(last.next).toBeNull();
 
 		// From an issue date on.
@@ -516,7 +582,8 @@ describe('issued invoices and their payments (0.2.0, VAT since 0.3.0)', () => {
 		expect(since.invoices.map((/** @type {any} */ i) => i.number)).toEqual([
 			'RE-2026-0003',
 			'RE-2026-0004',
-			'RE-2026-0005'
+			'RE-2026-0005',
+			'RE-2026-0006'
 		]);
 
 		for (const bad of [
@@ -551,6 +618,34 @@ describe('issued invoices and their payments (0.2.0, VAT since 0.3.0)', () => {
 		// Its own Eigenbeleg still comes under invoice:document:read.
 		const own = await books.call(providerId, 'invoice', 'get-pdf', { documentId: ids.eigenbeleg });
 		expect(own.mime).toBe('application/pdf');
+	});
+
+	it('hands over the XRechnung of an invoice whose customer gets one, the bytes the app downloads (0.4.0)', async () => {
+		const xml = await reader.call(providerId, 'invoice', 'get-xml', { documentId: ids.xrechnung });
+		const bytes = Uint8Array.from(atob(xml.base64), (c) => c.charCodeAt(0));
+		const text = new TextDecoder().decode(bytes);
+		expect(xml).toMatchObject({ mime: 'application/xml', size: bytes.byteLength });
+		expect(text).toBe(xrechnungXml(await store.invoices.get(ids.xrechnung)));
+		expect(text).toContain('<ram:BuyerReference>Bestellung 4711</ram:BuyerReference>');
+		const again = await books.call(providerId, 'invoice', 'get-xml', { documentId: ids.xrechnung });
+		expect(again.sha256).toBe(xml.sha256);
+
+		// An issued invoice to a customer who gets a PDF has none, and says so.
+		await expect(
+			reader.call(providerId, 'invoice', 'get-xml', { documentId: ids.second })
+		).rejects.toMatchObject({ code: 'INVALID_ARGUMENTS', message: /no XRechnung/ });
+		// A draft, an Eigenbeleg, an unknown id: no such document.
+		for (const documentId of [ids.draft, ids.eigenbeleg, 'no-such-document']) {
+			await expect(
+				books.call(providerId, 'invoice', 'get-xml', { documentId })
+			).rejects.toMatchObject({ code: 'INVALID_ARGUMENTS', message: /no such document/ });
+		}
+		// invoice:document:read does not open it: only issued invoices have one.
+		for (const consumer of [stranger, recorder]) {
+			await expect(
+				consumer.call(providerId, 'invoice', 'get-xml', { documentId: ids.xrechnung })
+			).rejects.toMatchObject({ code: 'SCOPE_MISSING' });
+		}
 	});
 
 	it('refuses an issued invoice’s PDF without invoice:issued:read', async () => {
@@ -708,6 +803,44 @@ describe('issued invoices and their payments (0.2.0, VAT since 0.3.0)', () => {
 		await expect(
 			provider.createInvitation({ scopes: [SCOPES.issuedRead, SCOPES.paymentRecord] })
 		).resolves.toMatchObject({ uri: expect.stringMatching(/^web\+ucep:pair\?/) });
+	});
+});
+
+describe('get-xml, called directly', () => {
+	it('sends the XRechnung inline only while the answer fits the connection', async () => {
+		const invoices = memoryCollection();
+		const commands = invoiceCommands({
+			store: /** @type {any} */ ({ invoices }),
+			settings: () => settings,
+			t
+		});
+		/** @returns {Promise<any>} */
+		const get = (/** @type {string} */ documentId, /** @type {boolean} */ limited) =>
+			commands['get-xml'].handler({ argsJson: { documentId }, limited });
+		const small = await invoices.put(
+			issued({ number: 'RE-2026-0001', issueDate: '2026-09-20', gross: 100, xrechnung: true })
+		);
+		const large = await invoices.put(
+			issued({
+				number: 'RE-2026-0002',
+				issueDate: '2026-09-20',
+				gross: 100,
+				xrechnung: true,
+				lines: 100
+			})
+		);
+
+		// A one-line XRechnung comes through the relay.
+		expect((await get(small.id, true)).base64).toEqual(expect.any(String));
+		// Even the largest one sent there leaves its answer within 64 KiB.
+		expect(Math.ceil(INLINE_XML_LIMIT.limited / 3) * 4 + 1024).toBeLessThan(64 * 1024);
+		// A hundred lines do not: named there, sent on a direct connection.
+		const relayed = await get(large.id, true);
+		expect(relayed.size).toBeGreaterThan(INLINE_XML_LIMIT.limited);
+		expect(relayed).toMatchObject({ mime: 'application/xml', sha256: expect.any(String) });
+		expect(relayed.base64).toBeUndefined();
+		const direct = await get(large.id, false);
+		expect(direct).toMatchObject({ sha256: relayed.sha256, base64: expect.any(String) });
 	});
 });
 

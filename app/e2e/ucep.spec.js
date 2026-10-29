@@ -3,8 +3,11 @@
 // gets nothing, an app paired by code comes through the human's yes, and an
 // unpaired app is refused again. The peer id stays over a reload. Since 0.2.0
 // the paired app also reads an issued invoice and reports it paid, and the
-// invoice list says so.
+// invoice list says so. Since 0.4.0 it fetches the XRechnung of an invoice
+// whose customer gets one, through the relay.
 import { test, expect } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { createConsumer } from '@le-space/ucep';
 import { addVirtualAuthenticator } from './webauthn.js';
 import { relayAddr, startConsumerNode } from './relay.js';
@@ -41,6 +44,14 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 		await page.getByRole('link', { name: 'Einstellungen' }).click();
 		await page.getByTestId('issuer-name').fill('Wolkenfabrik Hosting UG');
 		await page.getByTestId('issuer-address').fill('Musterstraße 1\n12345 Musterstadt');
+		// What an XRechnung needs of the issuer, made up; post code and city come from the address.
+		await page.getByTestId('issuer-postcode').focus();
+		await expect(page.getByTestId('issuer-city')).toHaveValue('Musterstadt');
+		await page.getByTestId('issuer-contact').fill('Erika Mustermann');
+		await page.getByLabel('USt-IdNr.').fill('DE123456789');
+		await page.getByLabel('E-Mail').fill('rechnung@example.com');
+		await page.getByLabel('Telefon').fill('+49 30 1234567');
+		await page.getByLabel('IBAN').fill('DE79 0000 0000 1234 5678 90');
 		await page.getByTestId('save-settings').click();
 		await expect(page.getByRole('status')).toContainText('Gespeichert');
 
@@ -135,12 +146,17 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 		expect(invoice).toMatchObject({
 			state: 'issued',
 			customer: { name: 'Beispiel Kunde GmbH' },
+			// Since 0.4.0: the files there are. This customer gets a PDF, and no XML.
+			formats: ['pdf'],
 			total: { value: '119.00', currency: 'EUR' },
 			// Since 0.3.0: what of it is VAT, at which rate and why.
 			net: { value: '100.00', currency: 'EUR' },
 			vat: [{ rate: '19', category: 'S', amount: { value: '19.00', currency: 'EUR' } }],
 			payments: []
 		});
+		await expect(
+			belege.call(providerId, 'invoice', 'get-xml', { documentId: invoice.documentId })
+		).rejects.toMatchObject({ code: 'INVALID_ARGUMENTS', message: /no XRechnung/ });
 		const paid = await belege.call(providerId, 'invoice', 'record-payment', {
 			documentId: invoice.documentId,
 			paidOn: invoice.issuedOn,
@@ -154,6 +170,40 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 		await expect(page.getByTestId('invoice-row').filter({ hasText: invoice.number })).toContainText(
 			'bezahlt am'
 		);
+
+		// An invoice to a customer who gets an XRechnung: Belege fetches its XML
+		// through the relay, the same bytes the app downloads.
+		await page.getByTestId('new-invoice').click();
+		await page.getByTestId('customer-name').fill('Beispiel Amt');
+		await page.getByTestId('customer-address').fill('Kundenweg 7\n54321 Beispielstadt');
+		await page.getByTestId('line-description').fill('Beratung');
+		await page.getByTestId('line-price').fill('950');
+		await page.getByTestId('e-invoice').selectOption('xrechnung');
+		await page.getByTestId('customer-buyer-reference').fill('Bestellung 4711');
+		await page.getByTestId('customer-email').fill('buchhaltung@example.org');
+		await expect(page.getByTestId('problems')).toHaveCount(0);
+		page.once('dialog', (dialog) => dialog.accept());
+		await page.getByTestId('issue').click();
+		const [xmlDownload] = await Promise.all([
+			page.waitForEvent('download'),
+			page.getByTestId('download-xml').click()
+		]);
+		const downloaded = await readFile(await xmlDownload.path());
+		const eInvoice = (await belege.call(providerId, 'invoice', 'list-issued', {})).invoices.find(
+			(/** @type {any} */ i) => i.customer.name === 'Beispiel Amt'
+		);
+		expect(eInvoice.formats).toEqual(['pdf', 'xrechnung']);
+		const xml = await belege.call(providerId, 'invoice', 'get-xml', {
+			documentId: eInvoice.documentId
+		});
+		expect(xml).toMatchObject({ mime: 'application/xml', base64: expect.any(String) });
+		const bytes = Buffer.from(xml.base64, 'base64');
+		expect(bytes.equals(downloaded)).toBe(true);
+		expect(createHash('sha256').update(bytes).digest('hex')).toBe(xml.sha256);
+		const text = bytes.toString('utf8');
+		expect(text).toContain('<ram:BuyerReference>Bestellung 4711</ram:BuyerReference>');
+		// 950,00 € + 19 % = 1.130,50 €
+		expect(text).toContain('<ram:DuePayableAmount>1130.50</ram:DuePayableAmount>');
 
 		// Sealed at rest: nothing of the pairing or the Eigenbeleg is readable on disk.
 		{
@@ -181,6 +231,9 @@ test('a paired app gets an Eigenbeleg through the relay, a stranger does not', a
 		expect(help.commands.length).toBeGreaterThan(1);
 		await expect(
 			stranger.call(providerId, 'invoice', 'create-eigenbeleg', args)
+		).rejects.toMatchObject({ code: 'PAIRING_REQUIRED' });
+		await expect(
+			stranger.call(providerId, 'invoice', 'get-xml', { documentId: eInvoice.documentId })
 		).rejects.toMatchObject({ code: 'PAIRING_REQUIRED' });
 
 		// Pairing by code: the app opens a window, the codes match, its human says yes.

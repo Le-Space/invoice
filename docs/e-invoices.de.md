@@ -11,7 +11,6 @@ Eine Rechnung kann neben ihrem PDF als **XRechnung** hinausgehen:
 Was es noch nicht gibt:
 
 - ZUGFeRD / Factur-X, das PDF mit eingebettetem XML ([#54](https://github.com/Le-Space/invoice/issues/54));
-- das XML über UCEP holen ([#55](https://github.com/Le-Space/invoice/issues/55));
 - der Versand über Peppol oder an Behördenportale.
 
 ## In der App
@@ -28,6 +27,7 @@ Was es noch nicht gibt:
    - PLZ, Ort und Land.
 3. **Bis alles da ist**, nennt der Entwurf, was fehlt, und „Ausstellen“ bleibt aus.
 4. **Eine ausgestellte Rechnung** bietet neben dem PDF „XRechnung herunterladen“ an.
+5. **Eine gekoppelte App** wie Belege kann das XML über UCEP mit `get-xml` holen und als Original behalten ([connections.de.md](connections.de.md)).
 
 **Die Anschrift bleibt der Freitext, den das PDF druckt.** PLZ, Ort und Land stehen daneben, und die Prüfung lehnt eine PLZ oder einen Ort ab, die im Freitext nicht stehen. So können PDF und XML nicht zwei Orte nennen.
 

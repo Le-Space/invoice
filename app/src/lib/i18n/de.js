@@ -18,7 +18,7 @@ export default {
 			eigenbeleg: 'Eigenbelege in deinem Namen erstellen.',
 			read: 'Dokumente lesen, die diese App angefordert hat, samt PDF.',
 			issuedRead:
-				'Deine ausgestellten Rechnungen lesen – Nummer, Kundenname, Beträge, Daten – samt PDF, um sie mit Zahlungen abzugleichen.',
+				'Deine ausgestellten Rechnungen lesen – Nummer, Kundenname, Beträge, Daten – samt PDF und XRechnung, um sie mit Zahlungen abzugleichen.',
 			paymentRecord: 'Melden, dass eine ausgestellte Rechnung bezahlt wurde, und wann.'
 		},
 		pairing: {
@@ -60,7 +60,7 @@ export default {
 					'**Welches Relay:** Die App fragt api.aleph.im nach den aktuellen Adressen der Le-Space-Relays und nimmt nur Einträge der beiden Le-Space-Wallets an. Aleph sieht dabei die IP-Adresse dieses Geräts.',
 					'**Was das Relay sieht:** die IP-Adresse dieses Geräts und der gekoppelten App, beider Peer-IDs, wann sie verbunden sind und wie viele Bytes fließen. Nicht den Inhalt: Jede Verbindung ist Ende zu Ende verschlüsselt (Noise), und das Relay kann sich nicht als diese App ausgeben.',
 					'**Direkte Verbindung:** Damit das PDF direkt fließt, handeln die beiden Geräte WebRTC aus und fragen dafür öffentliche STUN-Server (Google, Twilio, Cloudflare, Mozilla) nach ihrer öffentlichen Adresse. Diese Server sehen die IP-Adresse, keine Inhalte.',
-					'**Was eine gekoppelte App bekommt:** nur, was ihre Rechte erlauben – Eigenbelege erstellen und die eigenen wieder lesen; mit „invoice:issued:read“ deine ausgestellten Rechnungen (Nummer, Kundenname, Beträge, Daten, PDF), mit „invoice:payment:record“ Zahlungen dazu melden. Nie Entwürfe, deine Kundenliste oder die Eigenbelege anderer Apps. „Entkoppeln“ widerruft das sofort.',
+					'**Was eine gekoppelte App bekommt:** nur, was ihre Rechte erlauben – Eigenbelege erstellen und die eigenen wieder lesen; mit „invoice:issued:read“ deine ausgestellten Rechnungen (Nummer, Kundenname, Beträge, Daten, PDF, bei einer XRechnung auch die XML-Datei mit E-Mail-Adresse und Käuferreferenz des Kunden), mit „invoice:payment:record“ Zahlungen dazu melden. Nie Entwürfe, deine Kundenliste oder die Eigenbelege anderer Apps. „Entkoppeln“ widerruft das sofort.',
 					'**Deine Peer-ID** kommt aus deinem Passkey und bleibt gleich, damit gekoppelte Apps dich wiederfinden. Wer sie kennt, kann darüber Verbindungen dieser App wiedererkennen.'
 				]
 			},
@@ -75,6 +75,8 @@ export default {
 			status: 'Den Stand eines Dokuments abfragen.',
 			getPdf:
 				'Das PDF eines Dokuments holen – eines eigenen oder, mit invoice:issued:read, einer ausgestellten Rechnung.',
+			getXml:
+				'Die XRechnung einer ausgestellten Rechnung holen, deren Kunde eine bekommt – mit invoice:issued:read.',
 			listIssued: 'Die ausgestellten Rechnungen auflisten, mit Beträgen und gemeldeten Zahlungen.',
 			recordPayment:
 				'Eine Zahlung zu einer ausgestellten Rechnung melden, ändern oder zurücknehmen.'

@@ -1,7 +1,8 @@
 // The invoice extension of UCEP, served by this app (Le-Space/ucep-spec,
-// extensions/invoice.md, 0.3.0): a paired app — Belege — asks for a
+// extensions/invoice.md, 0.4.0): a paired app — Belege — asks for a
 // self-issued receipt (Eigenbeleg), learns its state and fetches its PDF; and
-// it reads the issued invoices and reports which of them were paid.
+// it reads the issued invoices, fetches their PDFs and XRechnungen, and
+// reports which of them were paid.
 //
 // Every command but `help` needs a grant. `invoice:document:read` only reads
 // the documents made under the same grant; `invoice:issued:read` reads every
@@ -28,6 +29,7 @@ import {
 } from '@le-space/invoice/records';
 import { documentLabels } from '@le-space/invoice/labels';
 import { invoicePdfBytes } from '@le-space/invoice/pdf';
+import { hasXRechnung, xrechnungXml } from '@le-space/invoice/xrechnung';
 import {
 	applyPayment,
 	decimalToUnits,
@@ -43,6 +45,13 @@ import { SCOPES, SCOPE_TEXT } from './scopes.js';
 
 /** A PDF goes inline only below this, and only on a direct connection (spec: get-pdf). */
 export const INLINE_PDF_LIMIT = 700 * 1024;
+
+/**
+ * An XRechnung goes inline below these (spec: get-xml): on a relayed
+ * connection while the answer stays within its 64 KiB, base64 being a third
+ * longer; on a direct one as a PDF does.
+ */
+export const INLINE_XML_LIMIT = { limited: 44 * 1024, direct: INLINE_PDF_LIMIT };
 
 /** `list-issued` answers at most this many invoices at once (spec), 100 unless asked. */
 export const LIST_LIMIT = 200;
@@ -87,7 +96,7 @@ export function invoiceManifest(t) {
 	return {
 		id: 'invoice',
 		name: t('ucep.manifest.name'),
-		version: '0.3.0',
+		version: '0.4.0',
 		description: t('ucep.manifest.description'),
 		author: 'Le-Space',
 		scopes: Object.entries(SCOPE_TEXT).map(([name, key]) => ({ name, description: t(key) }))
@@ -121,12 +130,22 @@ export async function invoiceFile(record, t) {
 	return { bytes, meta: await fileMeta(bytes) };
 }
 
+/**
+ * The XRechnung of an issued invoice, the same bytes the app downloads.
+ *
+ * @param {any} record
+ */
+export async function xrechnungFile(record) {
+	const bytes = new TextEncoder().encode(xrechnungXml(record));
+	return { bytes, meta: await fileMeta(bytes, 'application/xml') };
+}
+
 /** @param {Uint8Array} bytes */
-async function fileMeta(bytes) {
+async function fileMeta(bytes, mime = 'application/pdf') {
 	const digest = await sha256.digest(bytes);
 	const hex = Array.from(digest.digest, (b) => b.toString(16).padStart(2, '0')).join('');
 	return {
-		mime: 'application/pdf',
+		mime,
 		cid: CID.create(1, raw.code, digest).toString(),
 		size: bytes.byteLength,
 		sha256: hex
@@ -261,6 +280,8 @@ export function invoiceCommands({ store, settings, t, now = () => new Date(), gr
 			issuedOn: invoice.issueDate,
 			...(due ? { dueOn: due } : {}),
 			customer: { name: invoice.customer?.name ?? '', ...(vatId ? { vatId } : {}) },
+			// Since 0.4.0: what `get-pdf` and `get-xml` hand over for it.
+			formats: hasXRechnung(invoice) ? ['pdf', 'xrechnung'] : ['pdf'],
 			total: money(total, unit),
 			// Since 0.3.0: the net and the VAT breakdown as the invoice prints them (BG-23),
 			// so the bookkeeping app has the output VAT without reading the PDF.
@@ -325,6 +346,12 @@ export function invoiceCommands({ store, settings, t, now = () => new Date(), gr
 						syntax: 'get-pdf {"documentId"}',
 						description: t('ucep.commands.getPdf'),
 						scope: SCOPES.read
+					},
+					{
+						name: 'get-xml',
+						syntax: 'get-xml {"documentId"}',
+						description: t('ucep.commands.getXml'),
+						scope: SCOPES.issuedRead
 					},
 					{
 						name: 'list-issued',
@@ -428,6 +455,25 @@ export function invoiceCommands({ store, settings, t, now = () => new Date(), gr
 				// Inline only on a direct connection and below the limit, so the
 				// answer stays within 1 MiB; otherwise the consumer fetches by CID.
 				return !limited && bytes.byteLength < INLINE_PDF_LIMIT
+					? { ...meta, base64: base64(bytes) }
+					: meta;
+			}
+		},
+
+		// Only issued invoices have an XRechnung, so `invoice:issued:read` alone
+		// opens it. An invoice whose customer gets a PDF has none, and says so:
+		// this grant may know that the invoice exists.
+		'get-xml': {
+			scope: SCOPES.issuedRead,
+			description: t('ucep.commands.getXml'),
+			/** @param {any} ctx */
+			async handler({ argsJson, limited }) {
+				const invoice = await issuedInvoice(argsJson);
+				if (!hasXRechnung(invoice)) {
+					throw new UcepError('INVALID_ARGUMENTS', 'documentId: no XRechnung');
+				}
+				const { bytes, meta } = await xrechnungFile(invoice);
+				return bytes.byteLength < INLINE_XML_LIMIT[limited ? 'limited' : 'direct']
 					? { ...meta, base64: base64(bytes) }
 					: meta;
 			}

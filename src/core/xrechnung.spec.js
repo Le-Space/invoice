@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fixtures } from '../../scripts/xrechnung-fixtures.js';
 import { computeTotals } from './money.js';
 import { emptyDraft } from './records.js';
-import { unitCode, xrechnungFileName, xrechnungXml } from './xrechnung.js';
+import { hasXRechnung, unitCode, xrechnungFileName, xrechnungXml } from './xrechnung.js';
 
 const byName = Object.fromEntries(fixtures().map(({ name, invoice }) => [name, invoice]));
 
@@ -124,6 +124,22 @@ describe('an XRechnung', () => {
 			customer: { ...byName['01-standard-19'].customer, buyerReference: '' }
 		};
 		expect(() => xrechnungXml(incomplete)).toThrow(/buyerReference/);
+	});
+
+	it('is said to exist exactly where it can be made', () => {
+		for (const { name, invoice } of fixtures()) expect(hasXRechnung(invoice), name).toBe(true);
+		const standard = byName['01-standard-19'];
+		expect(hasXRechnung(emptyDraft())).toBe(false);
+		// A customer who gets a PDF, or an invoice issued before the app knew XRechnung.
+		expect(hasXRechnung({ ...standard, customer: { ...standard.customer, eInvoice: 'pdf' } })).toBe(
+			false
+		);
+		const before = { ...standard.customer };
+		delete before.eInvoice;
+		expect(hasXRechnung({ ...standard, customer: before })).toBe(false);
+		expect(
+			hasXRechnung({ ...standard, customer: { ...standard.customer, buyerReference: '' } })
+		).toBe(false);
 	});
 
 	it('is named after its invoice, as the PDF is', () => {
