@@ -29,9 +29,15 @@ export function isInvoiceSettingsKey(key) {
  * but §35a GmbHG's and §5 TMG's, and every invoice a business sends carries it
  * anyway, because that is where a customer looks for where to pay.
  *
+ * `contactName`, `postcode`, `city` and `country` are what an XRechnung needs
+ * beyond the printed footer: a contact person (BT-41, BR-DE-5), and the post
+ * code, city and ISO 3166-1 country of the address on their own (BR-DE-3/4).
+ * The PDF keeps printing `address` as it is typed.
+ *
  * @typedef {{
  *   name: string, address: string, vatId: string, taxNumber: string,
  *   email: string, phone: string, web: string,
+ *   contactName: string, postcode: string, city: string, country: string,
  *   bank: { name: string, iban: string, bic: string },
  *   crypto: { btc: string, eth: string },
  *   register: { court: string, number: string, managingDirector: string },
@@ -49,6 +55,10 @@ export function emptyIssuer(values = {}) {
 		email: '',
 		phone: '',
 		web: '',
+		contactName: '',
+		postcode: '',
+		city: '',
+		country: '',
 		...values,
 		bank: { name: '', iban: '', bic: '', ...(values.bank ?? {}) },
 		// Where an invoice in that currency is paid to (payment-code.js); `eth`

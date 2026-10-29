@@ -26,5 +26,7 @@ The app is built on these modules ([app.md](app.md)).
 | `eigenbeleg.js`, `eigenbeleg-pdf.js` | Self-issued receipts (Eigenbelege) for UCEP `create-eigenbeleg`: checked arguments, their own number range, the PDF |
 | `payments.js`                        | Payments reported for an issued invoice (UCEP `record-payment`): by reference, part payments, due day               |
 | `duplicates.js`                      | One number on two invoices is reported, not renumbered                                                              |
+| `xrechnung-rules.js`                 | What an XRechnung needs, checked before issuing: the BR-DE mandatory set, both electronic addresses, ISO currency   |
+| `xrechnung.js`                       | An issued invoice as XRechnung (UN/CEFACT CII, XRechnung 3.0); a Storno as credit note 381                          |
 
 `src/i18n/` – the German and English words of the printed invoice.

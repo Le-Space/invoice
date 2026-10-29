@@ -19,6 +19,13 @@
 	import { invoiceFileName, invoicePdfBytes } from '@le-space/invoice/pdf';
 	import { isEigenbeleg } from '@le-space/invoice/eigenbeleg';
 	import {
+		E_INVOICE_FORMATS,
+		postalFromAddress,
+		wantsXRechnung,
+		xrechnungProblems
+	} from '@le-space/invoice/xrechnung-rules';
+	import { xrechnungFileName, xrechnungXml } from '@le-space/invoice/xrechnung';
+	import {
 		eigenbelegFileName,
 		eigenbelegLabels,
 		eigenbelegPdfBytes,
@@ -72,6 +79,13 @@
 	});
 	let networks = $derived(draft ? (CURRENCY_NETWORKS[draft.currency] ?? []) : []);
 	let payment = $derived(issued && !eigenbeleg ? paymentOf(stored, today()) : null);
+	/** An issued invoice to a customer who gets an XRechnung, and has what it needs. */
+	let xml = $derived(
+		issued &&
+			!eigenbeleg &&
+			wantsXRechnung(stored) &&
+			xrechnungProblems(upgradeInvoice(stored)).length === 0
+	);
 	/** The payments another app reported, as stored (they change while the invoice does not). */
 	let payments = $derived(/** @type {any[]} */ (stored?.payments ?? []));
 
@@ -158,6 +172,26 @@
 		priceText[index] = formatAmount(line.unitPrice, unit);
 	}
 
+	/** @param {string} format */
+	function changeFormat(format) {
+		draft.customer.eInvoice = format;
+		if (format === 'xrechnung') fillPostal();
+	}
+
+	/**
+	 * The customer's post code, city and country for an XRechnung, from a
+	 * "12345 Musterstadt" line of the address, where they are still empty.
+	 */
+	function fillPostal() {
+		const customer = draft?.customer;
+		if (!customer || !wantsXRechnung(draft) || customer.postcode || customer.city) return;
+		const read = postalFromAddress(customer.address);
+		if (!read.postcode) return;
+		customer.postcode = read.postcode;
+		customer.city = read.city;
+		customer.country ||= read.country || (read.postcode.length === 5 ? 'DE' : '');
+	}
+
 	/** @param {number} index */
 	function removeLine(index) {
 		draft.lines.splice(index, 1);
@@ -202,6 +236,16 @@
 		}
 	}
 
+	/** Hand a file to the browser to save. @param {Blob} blob @param {string} name */
+	function offer(blob, name) {
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = name;
+		a.click();
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	}
+
 	async function downloadPdf() {
 		busy = true;
 		try {
@@ -215,17 +259,18 @@
 						upgradeInvoice(record),
 						documentLabels((key) => t(key))
 					);
-			const url = URL.createObjectURL(
-				new Blob([/** @type {BlobPart} */ (bytes)], { type: 'application/pdf' })
+			offer(
+				new Blob([/** @type {BlobPart} */ (bytes)], { type: 'application/pdf' }),
+				eigenbeleg ? eigenbelegFileName(stored) : invoiceFileName(stored)
 			);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = eigenbeleg ? eigenbelegFileName(stored) : invoiceFileName(stored);
-			a.click();
-			setTimeout(() => URL.revokeObjectURL(url), 1000);
 		} finally {
 			busy = false;
 		}
+	}
+
+	function downloadXml() {
+		const record = upgradeInvoice($state.snapshot(stored));
+		offer(new Blob([xrechnungXml(record)], { type: 'application/xml' }), xrechnungFileName(stored));
 	}
 
 	async function cancelInvoice() {
@@ -354,6 +399,15 @@
 				onclick={downloadPdf}
 				data-testid="download-pdf">{t('invoice.app.editor.pdf')}</button
 			>
+			{#if xml}
+				<button
+					type="button"
+					class={secondary}
+					disabled={busy}
+					onclick={downloadXml}
+					data-testid="download-xml">{t('invoice.app.editor.xml')}</button
+				>
+			{/if}
 			{#if !stored.cancelledBy && !stored.cancels}
 				<button
 					type="button"
@@ -389,8 +443,68 @@
 					class={input}
 					rows="3"
 					bind:value={draft.customer.address}
+					onblur={fillPostal}
 					data-testid="customer-address"></textarea></label
 			>
+			<label class="text-sm"
+				><span class={label}>{t('invoice.app.editor.eInvoice')}</span>
+				<select
+					class={input}
+					value={draft.customer.eInvoice ?? 'pdf'}
+					onchange={(e) => changeFormat(e.currentTarget.value)}
+					data-testid="e-invoice"
+				>
+					{#each E_INVOICE_FORMATS as format (format)}
+						<option value={format}>{t(`invoice.app.editor.eInvoiceFormats.${format}`)}</option>
+					{/each}
+				</select></label
+			>
+			{#if wantsXRechnung(draft)}
+				<p class="text-xs text-faint sm:col-span-2">{t('invoice.app.editor.eInvoiceHint')}</p>
+				<label class="text-sm sm:col-span-2"
+					><span class={label}>{t('invoice.app.editor.buyerReference')}</span>
+					<input
+						class={input}
+						bind:value={draft.customer.buyerReference}
+						data-testid="customer-buyer-reference"
+					/></label
+				>
+				<label class="text-sm"
+					><span class={label}>{t('invoice.app.editor.customerEmail')}</span>
+					<input
+						type="email"
+						class={input}
+						bind:value={draft.customer.email}
+						data-testid="customer-email"
+					/></label
+				>
+				<label class="text-sm"
+					><span class={label}>{t('invoice.app.editor.country')}</span>
+					<input
+						class={input}
+						value={draft.customer.country ?? ''}
+						oninput={(e) => (draft.customer.country = e.currentTarget.value.trim().toUpperCase())}
+						maxlength="2"
+						data-testid="customer-country"
+					/></label
+				>
+				<label class="text-sm"
+					><span class={label}>{t('invoice.app.editor.postcode')}</span>
+					<input
+						class={input}
+						bind:value={draft.customer.postcode}
+						data-testid="customer-postcode"
+					/></label
+				>
+				<label class="text-sm"
+					><span class={label}>{t('invoice.app.editor.city')}</span>
+					<input
+						class={input}
+						bind:value={draft.customer.city}
+						data-testid="customer-city"
+					/></label
+				>
+			{/if}
 		</fieldset>
 
 		<fieldset class="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-3">

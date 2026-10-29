@@ -1,9 +1,11 @@
 name: CI
 
 # core: the pure invoice modules, their specs and formatting; the PDF is drawn
-# and read back in memory. app: the PWA under app/ — lint, types, unit specs
-# (a real OrbitDB and Helia in Node), the build, and the browser specs with a
-# virtual passkey.
+# and read back in memory. xrechnung: made-up invoices as XRechnung, checked by
+# the KoSIT validator with its XRechnung configuration (scripts/kosit.sh); a
+# fixture it does not accept fails the build. app: the PWA under app/ — lint,
+# types, unit specs (a real OrbitDB and Helia in Node), the build, and the
+# browser specs with a virtual passkey.
 
 permissions:
   contents: read
@@ -35,6 +37,38 @@ jobs:
         run: pnpm lint
       - name: Test
         run: pnpm test
+
+  xrechnung:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.x'
+          cache: pnpm
+      # The validator is Java (11 or later).
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # Pinned by version and SHA-256 in scripts/kosit.sh, so the key changes with them.
+      - uses: actions/cache@v6
+        with:
+          path: .kosit
+          key: kosit-${{ hashFiles('scripts/kosit.sh') }}
+      - name: XRechnung, checked by KoSIT
+        run: pnpm xrechnung:validate
+      - name: Keep the reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kosit-reports
+          path: .kosit/run/
+          retention-days: 7
 
   app:
     runs-on: ubuntu-latest

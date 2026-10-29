@@ -1,6 +1,7 @@
 <script>
 	import { UNIT_MAX_LENGTH, circleOf, normaliseUnits } from '@le-space/invoice/settings';
 	import { payToAddress } from '@le-space/invoice/payment-code';
+	import { postalFromAddress } from '@le-space/invoice/xrechnung-rules';
 	import { t } from '#lib/i18n/index.js';
 	import { app, currentStore } from '#lib/session.svelte.js';
 	import { saveSettings } from '#lib/invoices.js';
@@ -13,8 +14,26 @@
 	let busy = $state(false);
 
 	$effect(() => {
-		if (app.settings && !form) form = structuredClone($state.snapshot(app.settings));
+		if (app.settings && !form) {
+			form = structuredClone($state.snapshot(app.settings));
+			fillPostal();
+		}
 	});
+
+	/**
+	 * The post code, city and country an XRechnung needs, taken from the printed
+	 * address where they are empty and the address has a "12345 Musterstadt"
+	 * line. Nothing is kept before "Speichern".
+	 */
+	function fillPostal() {
+		const issuer = form?.issuer;
+		if (!issuer || issuer.postcode || issuer.city) return;
+		const read = postalFromAddress(issuer.address);
+		if (!read.postcode) return;
+		issuer.postcode = read.postcode;
+		issuer.city = read.city;
+		issuer.country ||= read.country || (read.postcode.length === 5 ? 'DE' : '');
+	}
 
 	/** Which currency's address each field is checked as. */
 	const cryptoFields = /** @type {const} */ ([
@@ -103,6 +122,42 @@
 			<label class="text-sm"
 				><span class={label}>{t('invoice.app.settings.web')}</span>
 				<input class={input} bind:value={form.issuer.web} /></label
+			>
+		</fieldset>
+
+		<fieldset class={box} data-testid="issuer-e-invoice">
+			<legend class={legend}>{t('invoice.app.settings.eInvoice')}</legend>
+			<p class="text-xs text-faint sm:col-span-2">{t('invoice.app.settings.eInvoiceHint')}</p>
+			<label class="text-sm"
+				><span class={label}>{t('invoice.app.settings.contactName')}</span>
+				<input
+					class={input}
+					bind:value={form.issuer.contactName}
+					data-testid="issuer-contact"
+				/></label
+			>
+			<label class="text-sm"
+				><span class={label}>{t('invoice.app.settings.country')}</span>
+				<input
+					class={input}
+					value={form.issuer.country}
+					oninput={(e) => (form.issuer.country = e.currentTarget.value.trim().toUpperCase())}
+					maxlength="2"
+					data-testid="issuer-country"
+				/></label
+			>
+			<label class="text-sm"
+				><span class={label}>{t('invoice.app.settings.postcode')}</span>
+				<input
+					class={input}
+					bind:value={form.issuer.postcode}
+					onfocus={fillPostal}
+					data-testid="issuer-postcode"
+				/></label
+			>
+			<label class="text-sm"
+				><span class={label}>{t('invoice.app.settings.city')}</span>
+				<input class={input} bind:value={form.issuer.city} data-testid="issuer-city" /></label
 			>
 		</fieldset>
 

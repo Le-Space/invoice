@@ -7,12 +7,14 @@ _English: [app.md](app.md)_
 - **Rechnungen:**
   - eine Liste und ein Entwurfseditor (Kunde, Daten, Steuerart, Währung und Netz, der Eurokurs für die Umsatzsteuer, Positionen);
   - das Ausstellen mit der nächsten Nummer aus dem Kreis dieses Passkeys;
-  - das PDF und eine Storno.
+  - das PDF und eine Storno;
+  - für einen Kunden, der eine bekommt, eine XRechnung neben dem PDF ([e-invoices.de.md](e-invoices.de.md)).
 
   Eine neue Rechnung kann mit einer Chain-Vorlage beginnen (NYM, AKT, BTC, ETH, USDC auf Base).
 
 - **Einstellungen:**
   - Aussteller und Bank;
+  - Ansprechpartner, PLZ, Ort und Land, die eine XRechnung braucht;
   - die Krypto-Adressen, für ihr Netz geprüft;
   - die Einheiten für Positionen;
   - die übliche Steuerart und die Zahlungsbedingungen;

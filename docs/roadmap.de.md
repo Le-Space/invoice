@@ -11,7 +11,8 @@ _English: [roadmap.md](roadmap.md)_
 
 ## Geplant
 
-- **E-Rechnungen:** XRechnung und ZUGFeRD (EN 16931), mit KoSIT geprüft ([#19](https://github.com/Le-Space/invoice/issues/19)).
+- **ZUGFeRD / Factur-X:** das PDF als PDF/A-3 mit dem CII der XRechnung darin ([#54](https://github.com/Le-Space/invoice/issues/54)). Die XRechnung selbst gibt es ([e-invoices.de.md](e-invoices.de.md)).
+- **Die XRechnung über UCEP:** `get-xml`, damit eine gekoppelte Belege das XML-Original behält ([#55](https://github.com/Le-Space/invoice/issues/55)).
 - **Angebote:** ein zweiter Dokumenttyp, und eine öffentliche Kopie für die Finanzierung nach Meilensteinen ([#36](https://github.com/Le-Space/invoice/issues/36)). Die Finanzierung selbst gehört zu escrow01 in Le-Space/simple-todo.
 - **Zu entscheiden:** eine Replikationsschicht, mehrere Personen in einer Firma, und das Vorhalten durch einen Relay-Betreiber ([#32](https://github.com/Le-Space/invoice/issues/32)). Bis dahin bleiben die Bücher vom Netz.
 - **Sicherung und Wiederherstellen:** die Abnahme auf Hardware mit zwei echten Sicherheitsschlüsseln ([#28](https://github.com/Le-Space/invoice/issues/28)).

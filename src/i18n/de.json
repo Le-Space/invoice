@@ -92,7 +92,27 @@
 			"cryptoTransaction": "Diese Buchung ist keine Krypto-Transaktion mit Menge und Kurs.",
 			"cryptoCurrency": "Aus dieser Transaktion lässt sich nur eine Rechnung in Euro oder in ihrem eigenen Asset machen.",
 			"payAddress": "Für eine Rechnung in dieser Währung fehlt in den Einstellungen eine gültige Adresse, an die gezahlt wird.",
-			"network": "Diese Währung wird in diesem Netzwerk nicht gezahlt."
+			"network": "Diese Währung wird in diesem Netzwerk nicht gezahlt.",
+			"xr": {
+				"currency": "Eine XRechnung gibt es nur in einer Währung mit ISO-4217-Code (EUR, USD, CHF, GBP), nicht in Krypto.",
+				"issuerContact": "Für die XRechnung fehlt in den Einstellungen ein Ansprechpartner (BR-DE-5).",
+				"issuerPhone": "Für die XRechnung fehlt in den Einstellungen eine Telefonnummer (BR-DE-6).",
+				"issuerEmail": "Für die XRechnung fehlt in den Einstellungen eine gültige E-Mail-Adresse (BR-DE-7).",
+				"issuerPostcode": "Für die XRechnung fehlt in den Einstellungen die PLZ des Ausstellers (BR-DE-4).",
+				"issuerCity": "Für die XRechnung fehlt in den Einstellungen der Ort des Ausstellers (BR-DE-3).",
+				"issuerCountry": "Für die XRechnung fehlt in den Einstellungen das Land als Ländercode, z. B. DE.",
+				"issuerAddressMismatch": "PLZ und Ort des Ausstellers stehen nicht in seiner Anschrift – die XRechnung und das PDF würden verschiedene Orte nennen.",
+				"issuerTaxId": "Für die XRechnung braucht der Aussteller eine USt-IdNr. oder eine Steuernummer (BR-DE-16).",
+				"issuerVatId": "Reverse-Charge als XRechnung braucht die USt-IdNr. des Ausstellers; eine Steuernummer reicht nicht.",
+				"iban": "Für die XRechnung fehlt in den Einstellungen die IBAN (BR-DE-1).",
+				"buyerReference": "Für die XRechnung fehlt die Käuferreferenz – bei einer Behörde die Leitweg-ID (BR-DE-15).",
+				"customerEmail": "Für die XRechnung braucht der Kunde eine gültige E-Mail-Adresse.",
+				"customerPostcode": "Für die XRechnung fehlt die PLZ des Kunden (BR-DE-9).",
+				"customerCity": "Für die XRechnung fehlt der Ort des Kunden (BR-DE-8).",
+				"customerCountry": "Für die XRechnung fehlt das Land des Kunden als Ländercode, z. B. DE.",
+				"customerAddressMismatch": "PLZ und Ort des Kunden stehen nicht in seiner Anschrift – die XRechnung und das PDF würden verschiedene Orte nennen.",
+				"negativePrice": "In einer XRechnung ist kein Preis negativ: einen Nachlass als Position mit negativer Menge eintragen (BR-27)."
+			}
 		},
 		"note": {
 			"kleinunternehmer": "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.",

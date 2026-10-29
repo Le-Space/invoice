@@ -92,7 +92,27 @@
 			"cryptoTransaction": "This booking is not a crypto transaction with a quantity and a rate.",
 			"cryptoCurrency": "A transaction can only become an invoice in euros or in its own asset.",
 			"payAddress": "An invoice in this currency needs a valid address to be paid to in the settings.",
-			"network": "This currency is not paid on this network."
+			"network": "This currency is not paid on this network.",
+			"xr": {
+				"currency": "An XRechnung exists only in a currency with an ISO 4217 code (EUR, USD, CHF, GBP), not in crypto.",
+				"issuerContact": "For the XRechnung, the settings need a contact person (BR-DE-5).",
+				"issuerPhone": "For the XRechnung, the settings need a phone number (BR-DE-6).",
+				"issuerEmail": "For the XRechnung, the settings need a valid e-mail address (BR-DE-7).",
+				"issuerPostcode": "For the XRechnung, the settings need the issuer's post code (BR-DE-4).",
+				"issuerCity": "For the XRechnung, the settings need the issuer's city (BR-DE-3).",
+				"issuerCountry": "For the XRechnung, the settings need the country as a country code, e.g. DE.",
+				"issuerAddressMismatch": "The issuer's post code and city are not in its address: the XRechnung and the PDF would name different places.",
+				"issuerTaxId": "For the XRechnung, the issuer needs a VAT id or a tax number (BR-DE-16).",
+				"issuerVatId": "Reverse charge as an XRechnung needs the issuer's VAT id; a tax number is not enough.",
+				"iban": "For the XRechnung, the settings need the IBAN (BR-DE-1).",
+				"buyerReference": "For the XRechnung, the buyer reference is missing: for a public body, its Leitweg-ID (BR-DE-15).",
+				"customerEmail": "For the XRechnung, the customer needs a valid e-mail address.",
+				"customerPostcode": "For the XRechnung, the customer's post code is missing (BR-DE-9).",
+				"customerCity": "For the XRechnung, the customer's city is missing (BR-DE-8).",
+				"customerCountry": "For the XRechnung, the customer's country is missing, as a country code, e.g. DE.",
+				"customerAddressMismatch": "The customer's post code and city are not in its address: the XRechnung and the PDF would name different places.",
+				"negativePrice": "No price is negative in an XRechnung: enter a discount as a line with a negative quantity (BR-27)."
+			}
 		},
 		"note": {
 			"kleinunternehmer": "No VAT is charged, under §19 UStG.",
