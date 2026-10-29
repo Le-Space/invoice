@@ -11,7 +11,6 @@ An invoice can go out as an **XRechnung**, beside its PDF:
 What is not here yet:
 
 - ZUGFeRD / Factur-X, the PDF with the XML embedded ([#54](https://github.com/Le-Space/invoice/issues/54));
-- fetching the XML over UCEP ([#55](https://github.com/Le-Space/invoice/issues/55));
 - sending by Peppol or to public portals.
 
 ## In the app
@@ -28,6 +27,7 @@ What is not here yet:
    - post code, city and country.
 3. **Until it is all there**, the draft lists what is missing, and "Ausstellen" stays off.
 4. **An issued invoice** offers "XRechnung herunterladen" beside the PDF.
+5. **A paired app** such as Belege can fetch the XML over UCEP with `get-xml` and keep it as the original ([connections.md](connections.md)).
 
 **The address stays the free text the PDF prints.** Post code, city and country are kept beside it, and the check refuses a post code or city that the free text does not name. So the PDF and the XML cannot name two places.
 

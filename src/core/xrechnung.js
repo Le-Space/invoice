@@ -22,7 +22,7 @@ import { VAT_CURRENCY } from './currency.js';
 import { dueDay } from './document.js';
 import { computeTotals } from './money.js';
 import { moneyUnit, upgradeInvoice, vatInEuroCents } from './records.js';
-import { postalFromAddress, xrechnungProblems } from './xrechnung-rules.js';
+import { postalFromAddress, wantsXRechnung, xrechnungProblems } from './xrechnung-rules.js';
 
 /** BT-24: the specification an XRechnung 3.0 declares. */
 export const XRECHNUNG_GUIDELINE =
@@ -179,6 +179,23 @@ function postalAddress(party) {
 export function xrechnungFileName(invoice) {
 	const number = String(invoice?.number ?? 'Entwurf').replace(/[^A-Za-z0-9._-]/g, '-');
 	return `Rechnung-${number}.xml`;
+}
+
+/**
+ * Whether `xrechnungXml` makes an XRechnung of this record: an issued invoice
+ * whose customer gets one, with nothing the check refuses. An invoice issued
+ * before the app knew XRechnung has none; it stays the PDF it was.
+ *
+ * @param {any} record
+ */
+export function hasXRechnung(record) {
+	const invoice = upgradeInvoice(record);
+	return (
+		invoice?.state === 'issued' &&
+		Boolean(invoice.number) &&
+		wantsXRechnung(invoice) &&
+		xrechnungProblems(invoice).length === 0
+	);
 }
 
 /**

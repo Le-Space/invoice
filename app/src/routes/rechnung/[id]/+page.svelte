@@ -21,10 +21,9 @@
 	import {
 		E_INVOICE_FORMATS,
 		postalFromAddress,
-		wantsXRechnung,
-		xrechnungProblems
+		wantsXRechnung
 	} from '@le-space/invoice/xrechnung-rules';
-	import { xrechnungFileName, xrechnungXml } from '@le-space/invoice/xrechnung';
+	import { hasXRechnung, xrechnungFileName, xrechnungXml } from '@le-space/invoice/xrechnung';
 	import {
 		eigenbelegFileName,
 		eigenbelegLabels,
@@ -80,12 +79,7 @@
 	let networks = $derived(draft ? (CURRENCY_NETWORKS[draft.currency] ?? []) : []);
 	let payment = $derived(issued && !eigenbeleg ? paymentOf(stored, today()) : null);
 	/** An issued invoice to a customer who gets an XRechnung, and has what it needs. */
-	let xml = $derived(
-		issued &&
-			!eigenbeleg &&
-			wantsXRechnung(stored) &&
-			xrechnungProblems(upgradeInvoice(stored)).length === 0
-	);
+	let xml = $derived(issued && !eigenbeleg && hasXRechnung(stored));
 	/** The payments another app reported, as stored (they change while the invoice does not). */
 	let payments = $derived(/** @type {any[]} */ (stored?.payments ?? []));
 
