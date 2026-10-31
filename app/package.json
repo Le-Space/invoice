@@ -69,7 +69,7 @@
 		"blockstore-level": "4.0.1",
 		"datastore-core": "^11.0.0",
 		"datastore-level": "13.0.1",
-		"helia": "7.1.0",
+		"helia": "7.1.16",
 		"libp2p": "3.5.1",
 		"multiformats": "14.0.5",
 		"uqr": "0.1.3"
