@@ -36,6 +36,8 @@ Die Bücher unterschreiben als diese Identität, und sie ist die Wurzel der Zugr
 
 Unter Einstellungen → Schlüssel bekommt ein zweiter Passkey ein eigenes Fach, etwa ein YubiKey. Ein Schlüssel lässt sich entfernen, aber nie der letzte und nie der, mit dem gerade entsperrt ist; auch einer, den dieser Browser nicht hinterlegt hat, wie meist ein verlorener. Ein entfernter Schlüssel öffnet in diesem Browser nichts mehr.
 
+Jede Frage nach der PRF-Antwort eines Passkeys nennt diesen Passkey, und die Antwort eines anderen wird abgelehnt: Mit ihr wird nichts geöffnet und nichts versiegelt. Sonst könnte ein Authenticator, der die Liste der Anfrage übergeht, mit einem anderen Passkey dieser Seite antworten, und das Fach eines neuen Schlüssels öffnete sich nur für diesen. Geprüft wird die Antwort ab Provider 0.12.2 (`app/src/lib/passkey-identity.js`, `app/e2e/two-passkeys.spec.js`).
+
 Entfernen erneuert den Tresor: neue Tresor-, Datei- und Sicherungsschlüssel und ein Fach für jeden Schlüssel, der bleibt. Jeder, der bleibt, außer dem, mit dem entsperrt ist, wird einmal gefragt, und das zahlende Konto muss den neuen Sicherungsschlüssel freigeben ([backup.de.md](backup.de.md#einen-schlüssel-entfernen)).
 
 ## Sicherung und Wiederherstellen

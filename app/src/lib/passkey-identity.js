@@ -6,6 +6,8 @@
 // storage key is belege's, and `readPrfOutput` is new — it asks the passkey
 // for the PRF output the database key is derived from, and refuses to go on
 // without one. Provider bumped from 0.7.0 to 0.8.0 (same API for these calls).
+// Provider 0.12.2: `readPrfOutput` asks through the provider's own, which names
+// the passkey it asks and refuses another passkey's answer.
 //
 // Create-or-recover flow for the WebAuthn passkey identity.
 //
@@ -25,8 +27,9 @@ import {
 	loadWebAuthnCredential,
 	clearWebAuthnCredential,
 	restoreIdentityFromAuthenticator,
-	extractPrfSeedFromCredential,
-	prfInputForRelyingParty
+	readPrfOutput as askPrfOutput,
+	PrfUnavailableError as NoPrfOutputError,
+	WebAuthnAuthenticationError
 } from '@le-space/orbitdb-identity-provider-webauthn-did';
 
 const CREDENTIAL_STORAGE_KEY = 'invoice.webauthnCredential';
@@ -41,6 +44,18 @@ export class PrfUnavailableError extends Error {
 				'Chrome, Safari oder Firefox mit iCloud-Schlüsselbund, Google Passwortmanager oder 1Password).'
 		);
 		this.name = 'PrfUnavailableError';
+	}
+}
+
+/** Thrown when another passkey answered than the one asked; the message is for people. */
+export class OtherPasskeyError extends Error {
+	constructor() {
+		super(
+			'Geantwortet hat ein anderer Passkey als der, nach dem gefragt wurde. Mit seiner Antwort ' +
+				'wurde nichts geöffnet und nichts versiegelt. Bitte noch einmal versuchen und den Passkey ' +
+				'bestätigen, nach dem gefragt wird.'
+		);
+		this.name = 'OtherPasskeyError';
 	}
 }
 
@@ -131,25 +146,30 @@ export async function restorePasskeyCredential({ onTouch } = {}) {
  * own, else the fixed per-origin one), so the provider's signing key can be
  * derived from the same answer and OrbitDB does not have to ask again.
  *
+ * The request names this credential, and another passkey's answer is refused:
+ * its PRF output looks as right as the asked one's, and a vault slot sealed
+ * with it opens for the other passkey only. Before provider 0.12.2 this read
+ * went through `extractPrfSeedFromCredential`, whose `discoverableCredentials:
+ * undefined` counted as off, so the request named the credential by accident;
+ * the answer was taken from whichever passkey gave it.
+ *
  * @param {any} credential
  * @returns {Promise<Uint8Array>}
  * @throws {PrfUnavailableError}
+ * @throws {OtherPasskeyError}
  */
 export async function readPrfOutput(credential) {
-	// The input is passed explicitly: left to itself, `extractPrfSeedFromCredential`
-	// falls back to a *random* input, which would derive a new key every time
-	// and lock the books. A refused prompt throws and stays a refusal; only an
-	// authenticator that answers without PRF becomes PrfUnavailableError.
-	const prfInput = credential?.prfInput ?? (await prfInputForRelyingParty(location.hostname));
-	// Cast: the 0.8.0 declaration still says `(credential) => Uint8Array | null`;
-	// the code takes options and returns `{ seed, source }`.
-	const extract =
-		/** @type {(c: any, o: { prfInput: Uint8Array }) => Promise<{ seed: Uint8Array | null }>} */ (
-			/** @type {unknown} */ (extractPrfSeedFromCredential)
-		);
-	const { seed } = await extract(credential, { prfInput });
-	if (!(seed instanceof Uint8Array) || seed.length < 32) throw new PrfUnavailableError();
-	return seed;
+	// The provider never asks a random question, whose answer would derive a new
+	// key every time and lock the books. A refused prompt throws and stays a
+	// refusal; only an authenticator that answers without PRF becomes
+	// PrfUnavailableError.
+	try {
+		return await askPrfOutput(credential);
+	} catch (error) {
+		if (error instanceof NoPrfOutputError) throw new PrfUnavailableError();
+		if (error instanceof WebAuthnAuthenticationError) throw new OtherPasskeyError();
+		throw error;
+	}
 }
 
 /** True when a serialized credential exists in this browser profile. */

@@ -36,6 +36,8 @@ The books sign as that identity, and it is the root of every collection's access
 
 Under Einstellungen → Schlüssel, a second passkey — a YubiKey, say — gets a slot of its own. A key can be removed, but never the last one and never the one in use; a key this browser does not keep, as a lost one usually is, can be removed too. A removed key opens nothing in this browser any more.
 
+Every request for a passkey's PRF answer names that passkey, and an answer from another one is refused: nothing is opened or sealed with it. An authenticator that ignored the request's list could otherwise answer with another passkey of this site, and a new key's slot would open for that passkey only. The answer is checked from provider 0.12.2 on (`app/src/lib/passkey-identity.js`, `app/e2e/two-passkeys.spec.js`).
+
 Removing a key renews the vault: a new vault key, file key and backup key, with a slot for every key that stays. Every key that stays, other than the one in use, is asked once, and the paying account has to allow the new backup key ([backup.md](backup.md#removing-a-key)).
 
 ## Backup and restore
